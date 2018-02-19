@@ -1,5 +1,5 @@
-golang-github-go-debos-fakemachine (0.0~git20171207.6af110d-1) unstable; urgency=medium
+golang-github-go-debos-fakemachine (0.0~git20180126.e307c2f-1) unstable; urgency=medium
 
   * Initial release (Closes: #886769)
 
- -- Héctor Orón Martínez <zumbi@debian.org>  Wed, 10 Jan 2018 13:52:16 +0100
+ -- Héctor Orón Martínez <zumbi@debian.org>  Mon, 19 Feb 2018 18:23:23 +0100
