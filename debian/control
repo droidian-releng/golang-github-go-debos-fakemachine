@@ -23,8 +23,13 @@ Testsuite: autopkgtest-pkg-go
 Package: fakemachine
 Architecture: amd64
 Built-Using: ${misc:Built-Using}
-Depends: ${shlibs:Depends},
+Depends: busybox | busybox-static,
+         qemu-system-x86,
+         systemd,
+         ${shlibs:Depends},
          ${misc:Depends}
+Recommends: e2fsprogs,
+            linux-image-amd64
 Description: create and spawn virtual machines for building images with debos.
  Create and spawn virtual machines for building images with debos tool.
 
