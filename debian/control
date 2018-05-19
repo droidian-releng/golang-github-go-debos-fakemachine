@@ -18,7 +18,6 @@ Homepage: https://github.com/go-debos/fakemachine
 Vcs-Browser: https://salsa.debian.org/go-team/packages/golang-github-go-debos-fakemachine
 Vcs-Git: https://salsa.debian.org/go-team/packages/golang-github-go-debos-fakemachine.git
 XS-Go-Import-Path: github.com/go-debos/fakemachine
-Testsuite: autopkgtest-pkg-go
 
 Package: fakemachine
 Architecture: amd64
