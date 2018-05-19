@@ -21,7 +21,7 @@ XS-Go-Import-Path: github.com/go-debos/fakemachine
 Testsuite: autopkgtest-pkg-go
 
 Package: fakemachine
-Architecture: any
+Architecture: amd64
 Built-Using: ${misc:Built-Using}
 Depends: ${shlibs:Depends},
          ${misc:Depends}
@@ -29,7 +29,7 @@ Description: create and spawn virtual machines for building images with debos.
  Create and spawn virtual machines for building images with debos tool.
 
 Package: golang-github-go-debos-fakemachine-dev
-Architecture: any
+Architecture: amd64
 Built-Using: ${misc:Built-Using}
 Depends: ${shlibs:Depends},
          ${misc:Depends}
