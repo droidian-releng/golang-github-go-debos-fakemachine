@@ -1,8 +1,18 @@
-golang-github-go-debos-fakemachine (0.0~git20180126.e307c2f-2) UNRELEASED; urgency=medium
+golang-github-go-debos-fakemachine (0.0~git20180517.7d8d48a-1) unstable; urgency=medium
 
+  [ Alexandre Viau ]
   * Point Vcs-* urls to salsa.debian.org.
 
- -- Alexandre Viau <aviau@debian.org>  Mon, 02 Apr 2018 16:43:17 -0400
+  [ Héctor Orón Martínez ]
+  * New upstream version 0.0~git20180517.7d8d48a
+  * debian/control: set architecture to amd64 (Closes: #898650)
+  * debian/control: bump standards version, no changes
+
+  [ Simon McVittie ]
+  * Add missing dependencies (Closes: #898651, #891896)
+  * Add an autopkgtest smoke test (Closes: #898652)
+
+ -- Héctor Orón Martínez <zumbi@debian.org>  Sat, 19 May 2018 17:05:51 +0200
 
 golang-github-go-debos-fakemachine (0.0~git20180126.e307c2f-1) unstable; urgency=medium
 
