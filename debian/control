@@ -13,7 +13,7 @@ Build-Depends: debhelper (>= 10),
 # need for tests
 #               busybox,
 #               qemu-system
-Standards-Version: 4.1.3
+Standards-Version: 4.1.4
 Homepage: https://github.com/go-debos/fakemachine
 Vcs-Browser: https://salsa.debian.org/go-team/packages/golang-github-go-debos-fakemachine
 Vcs-Git: https://salsa.debian.org/go-team/packages/golang-github-go-debos-fakemachine.git
