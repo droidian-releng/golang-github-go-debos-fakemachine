@@ -1,3 +1,10 @@
+golang-github-go-debos-fakemachine (0.0~git20180701.cbb0abc-1) unstable; urgency=medium
+
+  * New upstream version 0.0~git20180701.cbb0abc
+  * debian/control: update standards version
+
+ -- Héctor Orón Martínez <zumbi@debian.org>  Fri, 10 Aug 2018 17:44:51 +0200
+
 golang-github-go-debos-fakemachine (0.0~git20180517.7d8d48a-1) unstable; urgency=medium
 
   [ Alexandre Viau ]
