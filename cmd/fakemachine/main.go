@@ -12,9 +12,10 @@ import (
 type Options struct {
 	Volumes     []string `short:"v" long:"volume" description:"volume to mount"`
 	Images      []string `short:"i" long:"image" description:"image to add"`
-	Memory      int      `short:"m" long:"memory" description:"Amount of memory for the fakemachine"`
+	Memory      int      `short:"m" long:"memory" description:"Amount of memory for the fakemachine in megabytes"`
 	CPUs        int      `short:"c" long:"cpus" description:"Number of CPUs for the fakemachine"`
-	ScratchSize string   `short:"s" long:"scratchsize" description:"On disk scratchspace size, if unset memory backed scratch space is used"`
+	ScratchSize string   `short:"s" long:"scratchsize" description:"On-disk scratch space size (with a unit suffix, e.g. 4G); if unset, memory backed scratch space is used"`
+	ShowBoot    bool     `long:"show-boot" description:"Show boot/console messages from the fakemachine"`
 }
 
 var options Options
@@ -78,13 +79,14 @@ func main() {
 	}
 
 	m := fakemachine.NewMachine()
+	m.SetShowBoot(options.ShowBoot)
 	SetupVolumes(m, options)
 	SetupImages(m, options)
 
 	if options.ScratchSize != "" {
 		size, err := units.FromHumanSize(options.ScratchSize)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Couldn't parse scratch size: %v", err)
+			fmt.Fprintf(os.Stderr, "fakemachine: Couldn't parse scratch size: %v\n", err)
 			os.Exit(1)
 		}
 		m.SetScratch(size, "")
@@ -103,6 +105,9 @@ func main() {
 		command = strings.Join(args, " ")
 	}
 
-	ret, _ := m.Run(command)
+	ret, err := m.Run(command)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fakemachine: %v\n", err)
+	}
 	os.Exit(ret)
 }
