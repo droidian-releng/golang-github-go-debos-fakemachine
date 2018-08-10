@@ -1,3 +1,6 @@
+// +build linux
+// +build amd64
+
 package fakemachine
 
 import (
@@ -36,11 +39,12 @@ type image struct {
 }
 
 type Machine struct {
-	mounts []mountPoint
-	count  int
-	images []image
-	memory int
+	mounts  []mountPoint
+	count   int
+	images  []image
+	memory  int
 	numcpus int
+	showBoot bool
 
 	scratchsize int64
 	scratchpath string
@@ -107,18 +111,18 @@ busybox mount -t proc proc /proc
 busybox mount -t sysfs none /sys
 
 busybox modprobe virtio_pci
+busybox modprobe virtio_console
 busybox modprobe 9pnet_virtio
 busybox modprobe 9p
 
-busybox mount -v -t 9p -o trans=virtio,version=9p2000.L usr /usr
+busybox mount -v -t 9p -o trans=virtio,version=9p2000.L,cache=loose,msize=262144 usr /usr
 if ! busybox test -L /bin ; then
-	busybox mount -v -t 9p -o trans=virtio,version=9p2000.L sbin /sbin
-	busybox mount -v -t 9p -o trans=virtio,version=9p2000.L bin /bin
-	busybox mount -v -t 9p -o trans=virtio,version=9p2000.L lib /lib
+	busybox mount -v -t 9p -o trans=virtio,version=9p2000.L,cache=loose,msize=262144 sbin /sbin
+	busybox mount -v -t 9p -o trans=virtio,version=9p2000.L,cache=loose,msize=262144 bin /bin
+	busybox mount -v -t 9p -o trans=virtio,version=9p2000.L,cache=loose,msize=262144 lib /lib
 fi
 exec /lib/systemd/systemd
 `
-
 const networkd = `
 [Match]
 Name=e*
@@ -130,6 +134,17 @@ LinkLocalAddressing=no
 IPv6AcceptRA=no
 `
 const commandWrapper = `#!/bin/sh
+/lib/systemd/systemd-networkd-wait-online -q
+if [ $? != 0 ]; then
+  echo "WARNING: Network setup failed"
+  echo "== Journal =="
+  journalctl -a --no-pager
+  echo "== networkd =="
+  networkctl status
+  networkctl list
+  echo 1 > /run/fakemachine/result
+  exit
+fi
 
 echo Running '%[1]s'
 %[1]s
@@ -141,8 +156,9 @@ const serviceTemplate = `
 Description=fakemachine runner
 Conflicts=shutdown.target
 Before=shutdown.target
-Requires=systemd-networkd-wait-online.service
-After=systemd-networkd-wait-online.service
+Requires=basic.target
+Wants=systemd-resolved.service binfmt-support.service systemd-networkd.service
+After=basic.target systemd-resolved.service binfmt-support.service systemd-networkd.service
 
 [Service]
 Environment=HOME=/root IN_FAKE_MACHINE=yes
@@ -152,6 +168,7 @@ ExecStopPost=/bin/sync
 ExecStopPost=/bin/systemctl poweroff -ff
 OnFailure=poweroff.target
 Type=idle
+TTYPath=%[1]s
 StandardInput=tty-force
 StandardOutput=inherit
 StandardError=inherit
@@ -249,6 +266,11 @@ func (m *Machine) SetNumCPUs(numcpus int) {
 	m.numcpus = numcpus
 }
 
+// SetShowBoot sets whether to show boot/console messages from the fakemachine.
+func (m *Machine) SetShowBoot(showBoot bool) {
+	m.showBoot = showBoot
+}
+
 // SetScratch sets the size and location of on-disk scratch space to allocate
 // (sparsely) for /scratch. If not set /scratch will be backed by memory. If
 // Path is "" then the working directory is used as a default storage location
@@ -273,7 +295,7 @@ func (m *Machine) generateFstab(w *writerhelper.WriterHelper) {
 
 	for _, point := range m.mounts {
 		fstab = append(fstab,
-			fmt.Sprintf("%s %s 9p trans=virtio,version=9p2000.L 0 0",
+			fmt.Sprintf("%s %s 9p trans=virtio,version=9p2000.L,cache=loose,msize=262144 0 0",
 				point.label, point.machineDirectory))
 	}
 	fstab = append(fstab, "")
@@ -313,6 +335,7 @@ func (m *Machine) writerKernelModules(w *writerhelper.WriterHelper) error {
 	}
 
 	modules := []string{
+		"kernel/drivers/char/virtio_console.ko",
 		"kernel/drivers/virtio/virtio.ko",
 		"kernel/drivers/virtio/virtio_pci.ko",
 		"kernel/net/9p/9pnet.ko",
@@ -452,30 +475,27 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 		"/lib/systemd/resolv.conf",
 		"/etc/resolv.conf",
 		0755)
-	w.WriteSymlink(
-		"/lib/systemd/system/systemd-networkd.service",
-		"/etc/systemd/system/multi-user.target.wants/systemd-networkd.service",
-		0755)
-
-	w.WriteSymlink(
-		"/lib/systemd/system/systemd-resolved.service",
-		"/etc/systemd/system/multi-user.target.wants/systemd-resolved.service",
-		0755)
-
-	w.WriteSymlink(
-		"/lib/systemd/system/systemd-networkd.socket",
-		"/etc/systemd/system/sockets.target.wants/systemd-networkd.socket",
-		0755)
-
-	w.WriteSymlink(
-		"/lib/systemd/system/binfmt-support.service",
-		"/etc/systemd/system/multi-user.target.wants/binfmt-support.service",
-		0755)
 
 	m.writerKernelModules(w)
 
-	w.WriteFile("etc/systemd/system/serial-getty@ttyS0.service",
-		serviceTemplate, 0755)
+	// By default we send job output to the second virtio console,
+	// reserving /dev/ttyS0 for boot messages (which we ignore)
+	// and /dev/hvc0 for possible use by systemd as a getty
+	// (which we also ignore).
+	tty := "/dev/hvc0"
+	if m.showBoot {
+		// If we are debugging a failing boot, mix job output into
+		// the normal console messages instead, so we can see both.
+		tty = "/dev/console"
+	}
+
+	w.WriteFile("etc/systemd/system/fakemachine.service",
+		fmt.Sprintf(serviceTemplate, tty), 0644)
+
+	w.WriteSymlink(
+		"/lib/systemd/system/serial-getty@ttyS0.service",
+		"/dev/null",
+		0755)
 
 	w.WriteFile("/wrapper",
 		fmt.Sprintf(commandWrapper, command), 0755)
@@ -504,9 +524,34 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 		"-enable-kvm",
 		"-kernel", "/boot/vmlinuz-" + kernelRelease,
 		"-initrd", InitrdPath,
-		"-nographic",
+		"-display", "none",
 		"-no-reboot"}
-	kernelargs := []string{"console=ttyS0", "quiet", "panic=-1"}
+	kernelargs := []string{"console=ttyS0", "panic=-1",
+		"systemd.unit=fakemachine.service"}
+
+	if m.showBoot {
+		// Create a character device representing our stdio
+		// file descriptors, and connect the emulated serial
+		// port (which is the console device for the BIOS,
+		// Linux and systemd, and is also connected to the
+		// fakemachine script) to that device
+		qemuargs = append(qemuargs,
+			"-chardev", "stdio,id=for-ttyS0,signal=off",
+			"-serial", "chardev:for-ttyS0")
+	} else {
+		qemuargs = append(qemuargs,
+			// Create the bus for virtio consoles
+			"-device", "virtio-serial",
+			// Create /dev/ttyS0 to be the VM console, but
+			// ignore anything written to it, so that it
+			// doesn't corrupt our terminal
+			"-chardev", "null,id=for-ttyS0",
+			"-serial", "chardev:for-ttyS0",
+			// Connect the fakemachine script to our stdio
+			// file descriptors
+			"-chardev", "stdio,id=for-hvc0,signal=off",
+			"-device", "virtconsole,chardev=for-hvc0")
+	}
 
 	for _, point := range m.mounts {
 		qemuargs = append(qemuargs, "-virtfs",
