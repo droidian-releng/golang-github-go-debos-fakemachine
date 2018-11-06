@@ -45,6 +45,7 @@ type Machine struct {
 	memory  int
 	numcpus int
 	showBoot bool
+	Environ []string
 
 	scratchsize int64
 	scratchpath string
@@ -151,6 +152,8 @@ echo Running '%[1]s'
 echo $? > /run/fakemachine/result
 `
 
+// The line 'Environment=%[2]s' is used for environment variables optionally
+// configured using Machine.SetEnviron()
 const serviceTemplate = `
 [Unit]
 Description=fakemachine runner
@@ -161,7 +164,7 @@ Wants=systemd-resolved.service binfmt-support.service systemd-networkd.service
 After=basic.target systemd-resolved.service binfmt-support.service systemd-networkd.service
 
 [Service]
-Environment=HOME=/root IN_FAKE_MACHINE=yes
+Environment=HOME=/root IN_FAKE_MACHINE=yes %[2]s
 WorkingDirectory=-/scratch
 ExecStart=/wrapper
 ExecStopPost=/bin/sync
@@ -301,6 +304,10 @@ func (m *Machine) generateFstab(w *writerhelper.WriterHelper) {
 	fstab = append(fstab, "")
 
 	w.WriteFile("/etc/fstab", strings.Join(fstab, "\n"), 0755)
+}
+
+func (m *Machine) SetEnviron(environ []string) {
+	m.Environ = environ
 }
 
 func (m *Machine) kernelRelease() (string, error) {
@@ -488,9 +495,8 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 		// the normal console messages instead, so we can see both.
 		tty = "/dev/console"
 	}
-
 	w.WriteFile("etc/systemd/system/fakemachine.service",
-		fmt.Sprintf(serviceTemplate, tty), 0644)
+		fmt.Sprintf(serviceTemplate, tty, strings.Join(m.Environ, " ")), 0644)
 
 	w.WriteSymlink(
 		"/lib/systemd/system/serial-getty@ttyS0.service",
