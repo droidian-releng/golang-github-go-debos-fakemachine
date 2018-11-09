@@ -1,3 +1,12 @@
+golang-github-go-debos-fakemachine (0.0~git20181105.9316584-1) unstable; urgency=medium
+
+  * New upstream version 0.0~git20181105.9316584
+  * debian/README.source: new file
+  * debian/control: set Rules-Require-Root to no
+  * debian/tests/control: drop obsoleted needs-recommends
+
+ -- Héctor Orón Martínez <zumbi@debian.org>  Fri, 09 Nov 2018 10:15:18 +0100
+
 golang-github-go-debos-fakemachine (0.0~git20180701.cbb0abc-1) unstable; urgency=medium
 
   * New upstream version 0.0~git20180701.cbb0abc
