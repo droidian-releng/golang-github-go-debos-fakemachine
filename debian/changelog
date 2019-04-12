@@ -1,3 +1,10 @@
+golang-github-go-debos-fakemachine (0.0~git20181105.9316584-2) unstable; urgency=medium
+
+  * fakemachine: execution fails due to missing shared lib
+    (Closes: #924392)
+
+ -- Héctor Orón Martínez <zumbi@debian.org>  Fri, 12 Apr 2019 11:53:04 +0200
+
 golang-github-go-debos-fakemachine (0.0~git20181105.9316584-1) unstable; urgency=medium
 
   * New upstream version 0.0~git20181105.9316584
