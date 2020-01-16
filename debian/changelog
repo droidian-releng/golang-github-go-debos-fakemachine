@@ -1,3 +1,10 @@
+golang-github-go-debos-fakemachine (0.0~git20191205.4a4d9a1-1) unstable; urgency=medium
+
+  * New upstream snapshot.
+  * Update debian/watch to fetch Git snapshots.
+
+ -- Andrej Shadura <andrewsh@debian.org>  Thu, 16 Jan 2020 15:20:13 +0100
+
 golang-github-go-debos-fakemachine (0.0~git20181105.9316584-2) unstable; urgency=medium
 
   * fakemachine: execution fails due to missing shared lib
