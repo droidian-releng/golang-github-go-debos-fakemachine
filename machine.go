@@ -4,6 +4,7 @@
 package fakemachine
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -12,9 +13,9 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/go-debos/fakemachine/cpio"
+	"golang.org/x/sys/unix"
 )
 
 func mergedUsrSystem() bool {
@@ -39,13 +40,13 @@ type image struct {
 }
 
 type Machine struct {
-	mounts  []mountPoint
-	count   int
-	images  []image
-	memory  int
-	numcpus int
+	mounts   []mountPoint
+	count    int
+	images   []image
+	memory   int
+	numcpus  int
 	showBoot bool
-	Environ []string
+	Environ  []string
 
 	scratchsize int64
 	scratchpath string
@@ -90,20 +91,6 @@ func InMachine() (ret bool) {
 func Supported() bool {
 	_, err := os.Stat("/dev/kvm")
 	return err == nil
-}
-
-func charsToString(in []int8) string {
-	s := make([]byte, len(in))
-
-	i := 0
-	for ; i < len(in); i++ {
-		if in[i] == 0 {
-			break
-		}
-		s[i] = byte(in[i])
-	}
-
-	return string(s[0:i])
 }
 
 const initScript = `#!/bin/busybox sh
@@ -162,6 +149,7 @@ Before=shutdown.target
 Requires=basic.target
 Wants=systemd-resolved.service binfmt-support.service systemd-networkd.service
 After=basic.target systemd-resolved.service binfmt-support.service systemd-networkd.service
+OnFailure=poweroff.target
 
 [Service]
 Environment=HOME=/root IN_FAKE_MACHINE=yes %[2]s
@@ -169,7 +157,6 @@ WorkingDirectory=-/scratch
 ExecStart=/wrapper
 ExecStopPost=/bin/sync
 ExecStopPost=/bin/systemctl poweroff -ff
-OnFailure=poweroff.target
 Type=idle
 TTYPath=%[1]s
 StandardInput=tty-force
@@ -178,6 +165,7 @@ StandardError=inherit
 KillMode=process
 IgnoreSIGPIPE=no
 SendSIGHUP=yes
+LimitNOFILE=4096
 `
 
 func (m *Machine) addStaticVolume(directory, label string) {
@@ -315,9 +303,11 @@ func (m *Machine) kernelRelease() (string, error) {
 	 * modules for that try the latest from /lib/modules. The former works best
 	 * for systems direclty running fakemachine, the latter makes sense in docker
 	 * environments */
-	var u syscall.Utsname
-	syscall.Uname(&u)
-	release := charsToString(u.Release[:])
+	var u unix.Utsname
+	if err := unix.Uname(&u); err != nil {
+		return "", err
+	}
+	release := string(u.Release[:bytes.IndexByte(u.Release[:], 0)])
 
 	if _, err := os.Stat(path.Join("/lib/modules", release)); err == nil {
 		return release, nil
@@ -457,6 +447,7 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 	if mergedUsrSystem() {
 		prefix = "/usr"
 	}
+	w.CopyFile(prefix + "/lib/x86_64-linux-gnu/libresolv.so.2")
 	w.CopyFile(prefix + "/lib/x86_64-linux-gnu/libc.so.6")
 	w.CopyFile(prefix + "/bin/busybox")
 
