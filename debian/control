@@ -8,6 +8,7 @@ Build-Depends: debhelper (>= 10),
                golang-any,
                golang-github-docker-go-units-dev,
                golang-github-surma-gocpio-dev,
+               golang-golang-x-sys-dev,
                golang-go-flags-dev,
                golang-github-stretchr-testify-dev,
 # need for tests
