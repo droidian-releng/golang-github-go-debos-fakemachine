@@ -4,6 +4,7 @@
 package fakemachine
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -352,12 +353,47 @@ func (m *Machine) writerKernelModules(w *writerhelper.WriterHelper) error {
 		"modules.builtin.bin",
 		"modules.devname"}
 
+	moddir := "/lib/modules"
+	if mergedUsrSystem() {
+		moddir = "/usr/lib/modules"
+	}
+
+	// build a list of built-in modules so that we don’t attempt to copy them
+	var builtinModules = make(map[string]bool)
+
+	f, err := os.Open(path.Join(moddir, kernelRelease, "modules.builtin"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		module := scanner.Text()
+		builtinModules[module] = true
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
 	for _, v := range modules {
-		usrpath := "/lib/modules"
-		if mergedUsrSystem() {
-			usrpath = "/usr/lib/modules"
+		if builtinModules[v] {
+			continue
 		}
-		if err := w.CopyFile(path.Join(usrpath, kernelRelease, v)); err != nil {
+
+		modpath := path.Join(moddir, kernelRelease, v)
+
+		if strings.HasSuffix(modpath, ".ko") {
+			if _, err := os.Stat(modpath); err != nil {
+				modpath += ".xz"
+			}
+			if _, err := os.Stat(modpath); err != nil {
+				return err
+			}
+		}
+
+		if err := w.CopyFile(modpath); err != nil {
 			return err
 		}
 	}
@@ -397,6 +433,8 @@ func (m *Machine) cleanup() {
 // the cpio. Extracontent is a list of {source, dest} tuples
 func (m *Machine) startup(command string, extracontent [][2]string) (int, error) {
 	defer m.cleanup()
+
+	os.Setenv("PATH", os.Getenv("PATH") + ":/sbin:/usr/sbin")
 
 	tmpdir, err := ioutil.TempDir("", "fakemachine-")
 	if err != nil {
@@ -449,7 +487,13 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 	}
 	w.CopyFile(prefix + "/lib/x86_64-linux-gnu/libresolv.so.2")
 	w.CopyFile(prefix + "/lib/x86_64-linux-gnu/libc.so.6")
-	w.CopyFile(prefix + "/bin/busybox")
+
+	// search for busybox; in some distros it's located under /sbin
+	busybox, err := exec.LookPath("busybox")
+	if err != nil {
+		return -1, err
+	}
+	w.CopyFileTo(busybox, prefix + "/bin/busybox")
 
 	/* Amd64 dynamic linker */
 	w.CopyFile("/lib64/ld-linux-x86-64.so.2")
