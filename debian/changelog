@@ -1,3 +1,9 @@
+golang-github-go-debos-fakemachine (0.0~git20200528.83ab90c-1) unstable; urgency=medium
+
+  * New upstream snapshot.
+
+ -- Andrej Shadura <andrewsh@debian.org>  Mon, 01 Jun 2020 13:12:08 +0200
+
 golang-github-go-debos-fakemachine (0.0~git20191205.4a4d9a1-2) unstable; urgency=medium
 
   * Add the missing build dependency.
