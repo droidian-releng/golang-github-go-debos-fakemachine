@@ -20,7 +20,7 @@ set -e
 set -u
 set -o pipefail
 
-cd "${AUTOPKGTEST_TMP:-"${ADTTMP}"}"
+cd "${AUTOPKGTEST_TMP:-"${AUTOPKGTEST_TMP}"}"
 
 if ! [ -w /dev/kvm ]; then
     echo "1..0 # SKIP no write access to /dev/kvm"
