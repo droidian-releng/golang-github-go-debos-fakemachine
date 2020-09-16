@@ -22,10 +22,10 @@ Vcs-Git: https://salsa.debian.org/go-team/packages/golang-github-go-debos-fakema
 XS-Go-Import-Path: github.com/go-debos/fakemachine
 
 Package: fakemachine
-Architecture: amd64
+Architecture: any
 Built-Using: ${misc:Built-Using}
 Depends: busybox | busybox-static,
-         qemu-system-x86,
+#         qemu-system-x86,
          systemd,
          ${shlibs:Depends},
          ${misc:Depends}
@@ -35,7 +35,7 @@ Description: create and spawn virtual machines for building images with debos.
  Create and spawn virtual machines for building images with debos tool.
 
 Package: golang-github-go-debos-fakemachine-dev
-Architecture: amd64
+Architecture: any
 Built-Using: ${misc:Built-Using}
 Depends: ${shlibs:Depends},
          ${misc:Depends}
