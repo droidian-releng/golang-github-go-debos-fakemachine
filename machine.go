@@ -1,5 +1,5 @@
 // +build linux
-// +build amd64 and arm64
+// +build amd64 and arm64 and arm
 
 package fakemachine
 
