@@ -1,3 +1,11 @@
+golang-github-go-debos-fakemachine (0.0~git20200805.8defac2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Set upstream metadata fields: Bug-Database, Bug-Submit.
+  * Replace use of deprecated $ADTTMP with $AUTOPKGTEST_TMP.
+
+ -- Andrej Shadura <andrewsh@debian.org>  Wed, 14 Oct 2020 15:12:38 +0200
+
 golang-github-go-debos-fakemachine (0.0~git20200528.83ab90c-1) unstable; urgency=medium
 
   * New upstream snapshot.
