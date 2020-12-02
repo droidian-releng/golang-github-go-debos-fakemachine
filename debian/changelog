@@ -1,3 +1,12 @@
+golang-github-go-debos-fakemachine (0.0~git20201127.9e6ee78-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Add myself as an uploader.
+  * Bump Standards-Version to 4.5.1.
+  * Use dh 12.
+
+ -- Andrej Shadura <andrewsh@debian.org>  Wed, 02 Dec 2020 14:51:32 +0100
+
 golang-github-go-debos-fakemachine (0.0~git20200805.8defac2-1) unstable; urgency=medium
 
   * New upstream release.
