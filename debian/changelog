@@ -1,9 +1,9 @@
-golang-github-go-debos-fakemachine (0.0~git20210901.fc48786-1) UNRELEASED; urgency=medium
+golang-github-go-debos-fakemachine (0.0~git20210901.fc48786-1) unstable; urgency=medium
 
   * Team upload.
   * New upstream release.
 
- -- Dylan Aïssi <daissi@debian.org>  Mon, 20 Sep 2021 14:16:12 +0200
+ -- Dylan Aïssi <daissi@debian.org>  Mon, 20 Sep 2021 14:36:06 +0200
 
 golang-github-go-debos-fakemachine (0.0~git20201127.9e6ee78-1) unstable; urgency=medium
 
