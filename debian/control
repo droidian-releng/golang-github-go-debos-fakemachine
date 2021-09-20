@@ -33,7 +33,7 @@ Depends: busybox | busybox-static,
          ${misc:Depends}
 Recommends: e2fsprogs,
             linux-image-amd64
-Description: create and spawn virtual machines for building images with debos.
+Description: create and spawn virtual machines for building images with debos
  Create and spawn virtual machines for building images with debos tool.
 
 Package: golang-github-go-debos-fakemachine-dev
@@ -41,6 +41,6 @@ Architecture: amd64
 Built-Using: ${misc:Built-Using}
 Depends: ${shlibs:Depends},
          ${misc:Depends}
-Description: create and spawn virtual machines for building images with debos.
+Description: create and spawn virtual machines for building images with debos
  Create and spawn virtual machines for building images with debos tool.
  (development libraries)
