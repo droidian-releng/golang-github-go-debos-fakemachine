@@ -6,11 +6,13 @@ package fakemachine
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -27,6 +29,95 @@ func mergedUsrSystem() bool {
 	}
 
 	return false
+}
+
+// Parse modinfo output and return the value of module attributes
+// There may be multiple row with same fieldname so []string
+// is used to return all data.
+func getModData(modname string, fieldname string, kernelRelease string) []string {
+	out, err := exec.Command("modinfo", "-k", kernelRelease, modname).Output()
+	if err != nil {
+		return nil
+	}
+
+	var fieldValue []string
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		field := strings.Split(strings.TrimSpace(scanner.Text()), ":")
+		if strings.TrimSpace(field[0]) == fieldname {
+			fieldValue = append(fieldValue, strings.TrimSpace(field[1]))
+		}
+	}
+	return fieldValue
+}
+
+// Get full path of module
+func getModPath(modname string, kernelRelease string) string {
+	path := getModData(modname, "filename", kernelRelease)
+	if len(path) != 0  {
+		return path[0]
+	}
+	return ""
+}
+
+// Get all dependent module
+func getModDepends(modname string, kernelRelease string) []string {
+	deplist := getModData(modname, "depends", kernelRelease)
+	var modlist []string
+	for _, v := range deplist {
+		if  v != "" {
+			modlist = append(modlist, strings.Split(v, ",")...)
+		}
+	}
+
+	return modlist
+}
+
+func (m *Machine) copyModules(w *writerhelper.WriterHelper, modname string, copiedModules map[string]bool) error {
+	release, _ := m.backend.KernelRelease()
+	modpath := getModPath(modname, release)
+	if modpath == "" {
+		return errors.New("Modules path couldn't be determined")
+	}
+
+	if modpath == "(builtin)" || copiedModules[modname] {
+		return nil
+	}
+
+	prefix := ""
+	if mergedUsrSystem() {
+		prefix = "/usr"
+	}
+
+	if err := w.CopyFile(prefix + modpath); err != nil {
+		return err
+	}
+
+	copiedModules[modname] = true;
+
+	deplist := getModDepends(modname, release)
+	for _, mod := range deplist {
+		if err := m.copyModules(w, mod, copiedModules); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Evaluate any symbolic link, then return the path's directory. Returns an
+// absolute path. Think of it as realpath(1) + dirname(1) in bash.
+func realDir(path string) (string, error) {
+	var p string
+	var err error
+	if p, err = filepath.Abs(path); err != nil {
+		return "", err
+	}
+	if p, err = filepath.EvalSymlinks(p); err != nil {
+		return "", err
+	}
+	return filepath.Dir(p), nil
 }
 
 type mountPoint struct {
@@ -95,7 +186,10 @@ func NewMachineWithBackend(backendName string) (*Machine, error) {
 	}
 
 	// Dbus configuration
-	m.AddVolume("/etc/dbus-1")
+	if _, err := os.Stat("/etc/dbus-1"); err == nil {
+		m.AddVolume("/etc/dbus-1")
+	}
+
 	// Debian alternative symlinks
 	if _, err := os.Stat("/etc/alternatives"); err == nil {
 		m.AddVolume("/etc/alternatives")
@@ -371,13 +465,13 @@ func (m *Machine) SetEnviron(environ []string) {
 	m.Environ = environ
 }
 
+
 func (m *Machine) writerKernelModules(w *writerhelper.WriterHelper, moddir string, modules []string) error {
 	if len(modules) == 0 {
 		return nil
 	}
 
-	modules = append(modules,
-			"modules.order",
+	modfiles := []string {"modules.order",
 			"modules.builtin",
 			"modules.dep",
 			"modules.dep.bin",
@@ -387,44 +481,18 @@ func (m *Machine) writerKernelModules(w *writerhelper.WriterHelper, moddir strin
 			"modules.symbols",
 			"modules.symbols.bin",
 			"modules.builtin.bin",
-			"modules.devname")
+			"modules.devname"}
 
-	// build a list of built-in modules so that we don’t attempt to copy them
-	var builtinModules = make(map[string]bool)
-
-	f, err := os.Open(path.Join(moddir, "modules.builtin"))
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		module := scanner.Text()
-		builtinModules[module] = true
-	}
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	for _, v := range modules {
-		if builtinModules[v] {
-			continue
+	for _, v := range modfiles {
+		if err := w.CopyFile(moddir + "/" + v); err != nil {
+			return err
 		}
+	}
 
-		modpath := path.Join(moddir, v)
+	copiedModules := make(map[string]bool)
 
-		if strings.HasSuffix(modpath, ".ko") {
-			if _, err := os.Stat(modpath); err != nil {
-				modpath += ".xz"
-			}
-			if _, err := os.Stat(modpath); err != nil {
-				return err
-			}
-		}
-
-		if err := w.CopyFile(modpath); err != nil {
+	for _, modname := range modules  {
+		if err := m.copyModules(w, modname, copiedModules); err != nil {
 			return err
 		}
 	}
@@ -523,8 +591,6 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 	if mergedUsrSystem() {
 		prefix = "/usr"
 	}
-	w.CopyFile(prefix + "/lib/x86_64-linux-gnu/libresolv.so.2")
-	w.CopyFile(prefix + "/lib/x86_64-linux-gnu/libc.so.6")
 
 	// search for busybox; in some distros it's located under /sbin
 	busybox, err := exec.LookPath("busybox")
@@ -535,6 +601,14 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 
 	/* Amd64 dynamic linker */
 	w.CopyFile("/lib64/ld-linux-x86-64.so.2")
+
+	/* C libraries */
+	libraryDir, err := realDir("/lib64/ld-linux-x86-64.so.2")
+	if err != nil {
+		return -1, err
+	}
+	w.CopyFile(libraryDir + "/libc.so.6")
+	w.CopyFile(libraryDir + "/libresolv.so.2")
 
 	w.WriteCharDevice("/dev/console", 5, 1, 0700)
 

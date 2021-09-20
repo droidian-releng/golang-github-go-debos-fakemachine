@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -28,9 +29,11 @@ func (b kvmBackend) Name() string {
 }
 
 func (b kvmBackend) Supported() (bool, error) {
-	if _, err := os.Stat("/dev/kvm"); err != nil {
+	kvmDevice, err := os.OpenFile("/dev/kvm", os.O_RDWR, 0);
+	if err != nil {
 		return false, err
 	}
+	kvmDevice.Close()
 
 	if _, err := b.QemuPath(); err != nil {
 		return false, err
@@ -42,7 +45,7 @@ func (b kvmBackend) QemuPath() (string, error) {
 	return exec.LookPath("qemu-system-x86_64")
 }
 
-func (b kvmBackend) hostKernelRelease() (string, error) {
+func (b kvmBackend) KernelRelease() (string, error) {
 	/* First try the kernel the current system is running, but if there are no
 	 * modules for that try the latest from /lib/modules. The former works best
 	 * for systems directly running fakemachine, the latter makes sense in docker
@@ -74,14 +77,60 @@ func (b kvmBackend) hostKernelRelease() (string, error) {
 	return "", fmt.Errorf("No kernel found")
 }
 
+func (b kvmBackend) hostKernelPath(kernelRelease string) (string, error) {
+	kernelDir := "/boot"
+	kernelPrefix := "vmlinuz-"
+
+	/* First, try to find a kernel with a well-known name */
+	kernelPath := filepath.Join(kernelDir, kernelPrefix + kernelRelease)
+	if _, err := os.Stat(kernelPath); err == nil {
+		return kernelPath, nil
+	}
+
+	/* Otherwise, inspect each kernel installed, and look for the release
+	 * string straight in the binary. Not pretty, but it works. */
+	needle := kernelRelease
+	if !strings.HasSuffix(needle, " ") {
+		// Add space to match exact kernel description string e.g
+		// 4.19.0-6-amd64 (debian-kernel@lists.debian.org) #1 SMP Debian 4.19.67-2+deb10u2 (2019-11-11)
+		needle += " "
+	}
+
+	files, err := ioutil.ReadDir(kernelDir)
+	if err != nil {
+		return "", err
+	}
+
+	for _, f := range files {
+		if !strings.HasPrefix(f.Name(), kernelPrefix) || f.IsDir() {
+			continue
+		}
+
+		kernelPath := filepath.Join(kernelDir, f.Name())
+		buf, err := ioutil.ReadFile(kernelPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Failed to read kernel:", err)
+			continue
+		}
+
+		if !bytes.Contains(buf, []byte(needle)) {
+			continue
+		}
+
+		return kernelPath, nil
+	}
+
+	return "", fmt.Errorf("No kernel found for release %s", kernelRelease)
+}
+
 func (b kvmBackend) KernelPath() (string, string, error) {
-	kernelRelease, err := b.hostKernelRelease()
+	kernelRelease, err := b.KernelRelease()
 	if err != nil {
 		return "", "", err
 	}
 
-	kernelPath := "/boot/vmlinuz-" + kernelRelease
-	if _, err := os.Stat(kernelPath); err != nil {
+	kernelPath, err := b.hostKernelPath(kernelRelease)
+	if err != nil {
 		return "", "", err
 	}
 
@@ -99,14 +148,12 @@ func (b kvmBackend) KernelPath() (string, string, error) {
 }
 
 func (b kvmBackend) InitrdModules() []string {
-	return []string{"kernel/drivers/char/virtio_console.ko",
-			"kernel/drivers/virtio/virtio.ko",
-			"kernel/drivers/virtio/virtio_pci.ko",
-			"kernel/net/9p/9pnet.ko",
-			"kernel/drivers/virtio/virtio_ring.ko",
-			"kernel/fs/9p/9p.ko",
-			"kernel/net/9p/9pnet_virtio.ko",
-			"kernel/fs/fscache/fscache.ko"}
+	return []string{"virtio_console",
+			"virtio",
+			"virtio_pci",
+			"virtio_ring",
+			"9p",
+			"9pnet_virtio"}
 }
 
 func (b kvmBackend) UdevRules() []string {
