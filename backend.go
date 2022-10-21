@@ -1,41 +1,65 @@
-// +build linux
-// +build amd64
+//go:build linux && amd64
+// +build linux,amd64
 
 package fakemachine
 
-import(
+import (
 	"fmt"
 )
 
-// A list of backends which are implemented
-func BackendNames() []string {
-	return []string{"auto", "kvm", "uml"}
+// List of backends in order of their priority in the "auto" algorithm
+func implementedBackends(m *Machine) []backend {
+	return []backend{
+		newKvmBackend(m),
+		newUmlBackend(m),
+		newQemuBackend(m),
+	}
 }
 
+/* A list of backends which are implemented - sorted in order in which the
+ * "auto" backend chooses them.
+ */
+func BackendNames() []string {
+	names := []string{"auto"}
+
+	for _, backend := range implementedBackends(nil) {
+		names = append(names, backend.Name())
+	}
+
+	return names
+}
+
+/* The "auto" backend loops through each backend, starting with the lowest order.
+ * The backend is created and checked if the creation was successful (i.e. it is
+ * supported on this machine). If so, that backend is used for the fakemachine. If
+ * unsuccessful, the next backend is created until no more backends remain then
+ * an error is thrown explaining why each backend was unsuccessful.
+ */
 func newBackend(name string, m *Machine) (backend, error) {
+	backends := implementedBackends(m)
 	var b backend
+	var err error
 
-	switch name {
-	case "auto":
-		// select kvm first
-		b, kvm_err := newBackend("kvm", m)
-		if kvm_err == nil {
+	if name == "auto" {
+		for _, backend := range backends {
+			backendName := backend.Name()
+			b, backendErr := newBackend(backendName, m)
+			if backendErr != nil {
+				err = fmt.Errorf("%v, %v", err, backendErr)
+				continue
+			}
 			return b, nil
 		}
+		return nil, err
+	}
 
-		// falling back to uml
-		b, uml_err := newBackend("uml", m)
-		if uml_err == nil {
-			return b, nil
+	// find backend by name
+	for _, backend := range backends {
+		if backend.Name() == name {
+			b = backend
 		}
-
-		// no backend supported
-		return nil, fmt.Errorf("%v, %v", kvm_err, uml_err)
-	case "kvm":
-		b = newKvmBackend(m)
-	case "uml":
-		b = newUmlBackend(m)
-	default:
+	}
+	if b == nil {
 		return nil, fmt.Errorf("%s backend does not exist", name)
 	}
 
@@ -58,11 +82,11 @@ type backend interface {
 	// Get kernel release version
 	KernelRelease() (string, error)
 
-	// The path to the kernel and modules
-	KernelPath() (kernelPath string, moddir string, err error)
+	// The path to the kernel
+	KernelPath() (kernelPath string, err error)
 
-	// A list of modules to include in the initrd
-	InitrdModules() []string
+	// The path to the modules
+	ModulePath() (moddir string, err error)
 
 	// A list of udev rules
 	UdevRules() []string
@@ -76,7 +100,7 @@ type backend interface {
 	// The parameters used to mount a specific volume into the machine
 	MountParameters(mount mountPoint) (fstype string, options []string)
 
-	// A list of modules which should be probed in the initscript
+	// A list of modules to be added to initrd and probed in the initscript
 	InitModules() []string
 
 	// A list of additional volumes which should mounted in the initscript

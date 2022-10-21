@@ -10,8 +10,23 @@ import (
 	"testing"
 )
 
+var backendName string
+
+func init() {
+	flag.StringVar(&backendName, "backend", "auto", "Fakemachine backend to use")
+}
+
+func CreateMachine(t *testing.T) *Machine {
+	machine, err := NewMachineWithBackend(backendName)
+	assert.Nil(t, err)
+	machine.SetNumCPUs(2)
+
+	return machine
+}
+
 func TestSuccessfullCommand(t *testing.T) {
-	m := NewMachine()
+	t.Parallel()
+	m := CreateMachine(t)
 
 	exitcode, _ := m.Run("ls /")
 
@@ -21,7 +36,8 @@ func TestSuccessfullCommand(t *testing.T) {
 }
 
 func TestCommandNotFound(t *testing.T) {
-	m := NewMachine()
+	t.Parallel()
+	m := CreateMachine(t)
 	exitcode, _ := m.Run("/a/b/c /")
 
 	if exitcode != 127 {
@@ -30,10 +46,12 @@ func TestCommandNotFound(t *testing.T) {
 }
 
 func TestImage(t *testing.T) {
-	m := NewMachine()
+	t.Parallel()
+	m := CreateMachine(t)
 
-	m.CreateImage("test.img", 1024*1024)
-	exitcode, _ := m.Run("test -b /dev/vda")
+	_, err := m.CreateImage("test.img", 1024*1024)
+	assert.Nil(t, err)
+	exitcode, _ := m.Run("test -b /dev/disk/by-fakemachine-label/fakedisk-0")
 
 	if exitcode != 0 {
 		t.Fatalf("Test for the virtual image device failed with %d", exitcode)
@@ -63,12 +81,13 @@ func AssertMount(t *testing.T, mountpoint, fstype string) {
 }
 
 func TestScratchTmp(t *testing.T) {
+	t.Parallel()
 	if InMachine() {
 		AssertMount(t, "/scratch", "tmpfs")
 		return
 	}
 
-	m := NewMachine()
+	m := CreateMachine(t)
 
 	exitcode, _ := m.RunInMachineWithArgs([]string{"-test.run TestScratchTmp"})
 
@@ -78,12 +97,13 @@ func TestScratchTmp(t *testing.T) {
 }
 
 func TestScratchDisk(t *testing.T) {
+	t.Parallel()
 	if InMachine() {
 		AssertMount(t, "/scratch", "ext4")
 		return
 	}
 
-	m := NewMachine()
+	m := CreateMachine(t)
 	m.SetScratch(1024*1024*1024, "")
 
 	exitcode, _ := m.RunInMachineWithArgs([]string{"-test.run TestScratchDisk"})
@@ -94,7 +114,8 @@ func TestScratchDisk(t *testing.T) {
 }
 
 func TestMemory(t *testing.T) {
-	m := NewMachine()
+	t.Parallel()
+	m := CreateMachine(t)
 
 	m.SetMemory(1024)
 	// Nasty hack, this gets a chunk of shell script inserted in the wrapper script
@@ -115,13 +136,13 @@ fi
 }
 
 func TestSpawnMachine(t *testing.T) {
-
+	t.Parallel()
 	if InMachine() {
 		t.Log("Running in the machine")
 		return
 	}
 
-	m := NewMachine()
+	m := CreateMachine(t)
 
 	exitcode, _ := m.RunInMachineWithArgs([]string{"-test.run TestSpawnMachine"})
 
@@ -131,6 +152,7 @@ func TestSpawnMachine(t *testing.T) {
 }
 
 func TestImageLabel(t *testing.T) {
+	t.Parallel()
 	if InMachine() {
 		t.Log("Running in the machine")
 		devices := flag.Args()
@@ -150,7 +172,7 @@ func TestImageLabel(t *testing.T) {
 		return
 	}
 
-	m := NewMachine()
+	m := CreateMachine(t)
 	autolabel, err := m.CreateImage("test-autolabel.img", 1024*1024)
 	assert.Nil(t, err)
 

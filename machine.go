@@ -1,5 +1,5 @@
-// +build linux
-// +build amd64
+//go:build linux && amd64
+// +build linux,amd64
 
 package fakemachine
 
@@ -24,11 +24,7 @@ import (
 func mergedUsrSystem() bool {
 	f, _ := os.Lstat("/bin")
 
-	if (f.Mode() & os.ModeSymlink) == os.ModeSymlink {
-		return true
-	}
-
-	return false
+	return (f.Mode() & os.ModeSymlink) == os.ModeSymlink
 }
 
 // Parse modinfo output and return the value of module attributes
@@ -55,7 +51,7 @@ func getModData(modname string, fieldname string, kernelRelease string) []string
 // Get full path of module
 func getModPath(modname string, kernelRelease string) string {
 	path := getModData(modname, "filename", kernelRelease)
-	if len(path) != 0  {
+	if len(path) != 0 {
 		return path[0]
 	}
 	return ""
@@ -66,12 +62,19 @@ func getModDepends(modname string, kernelRelease string) []string {
 	deplist := getModData(modname, "depends", kernelRelease)
 	var modlist []string
 	for _, v := range deplist {
-		if  v != "" {
+		if v != "" {
 			modlist = append(modlist, strings.Split(v, ",")...)
 		}
 	}
 
 	return modlist
+}
+
+var suffixes = map[string]writerhelper.Transformer{
+	".ko":     NullDecompressor,
+	".ko.gz":  GzipDecompressor,
+	".ko.xz":  XzDecompressor,
+	".ko.zst": ZstdDecompressor,
 }
 
 func (m *Machine) copyModules(w *writerhelper.WriterHelper, modname string, copiedModules map[string]bool) error {
@@ -90,11 +93,30 @@ func (m *Machine) copyModules(w *writerhelper.WriterHelper, modname string, copi
 		prefix = "/usr"
 	}
 
-	if err := w.CopyFile(prefix + modpath); err != nil {
-		return err
+	found := false
+	for suffix, fn := range suffixes {
+		if strings.HasSuffix(modpath, suffix) {
+			// File must exist as-is on the filesystem. Aka do not
+			// fallback to other suffixes.
+			if _, err := os.Stat(modpath); err != nil {
+				return err
+			}
+
+			// The suffix is the complete thing - ".ko.foobar"
+			// Reinstate the required ".ko" part, after trimming.
+			basepath := strings.TrimSuffix(modpath, suffix) + ".ko"
+			if err := w.TransformFileTo(modpath, prefix+basepath, fn); err != nil {
+				return err
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		return errors.New("Module extension/suffix unknown")
 	}
 
-	copiedModules[modname] = true;
+	copiedModules[modname] = true
 
 	deplist := getModDepends(modname, release)
 	for _, mod := range deplist {
@@ -150,12 +172,8 @@ type Machine struct {
 }
 
 // Create a new machine object with the auto backend
-func NewMachine() *Machine {
-	m, err := NewMachineWithBackend("auto")
-	if err != nil {
-		panic(err)
-	}
-	return m
+func NewMachine() (*Machine, error) {
+	return NewMachineWithBackend("auto")
 }
 
 // Create a new machine object
@@ -314,9 +332,9 @@ func tmplStaticVolumes(m Machine) []mountPoint {
 	return mounts
 }
 
-func executeInitScriptTemplate(m *Machine, b backend) []byte {
+func executeInitScriptTemplate(m *Machine, b backend) ([]byte, error) {
 	helperFuncs := template.FuncMap{
-		"MountVolume": tmplMountVolume,
+		"MountVolume":   tmplMountVolume,
 		"StaticVolumes": tmplStaticVolumes,
 	}
 
@@ -329,9 +347,9 @@ func executeInitScriptTemplate(m *Machine, b backend) []byte {
 	tmpl := template.Must(template.New("init").Funcs(helperFuncs).Parse(initScript))
 	out := &bytes.Buffer{}
 	if err := tmpl.Execute(out, tmplVariables); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return out.Bytes()
+	return out.Bytes(), nil
 }
 
 func (m *Machine) addStaticVolume(directory, label string) {
@@ -440,7 +458,7 @@ func (m *Machine) SetScratch(scratchsize int64, path string) {
 	}
 }
 
-func (m Machine) generateFstab(w *writerhelper.WriterHelper, backend backend) {
+func (m Machine) generateFstab(w *writerhelper.WriterHelper, backend backend) error {
 	fstab := []string{"# Generated fstab file by fakemachine"}
 
 	if m.scratchfile == "" {
@@ -458,30 +476,54 @@ func (m Machine) generateFstab(w *writerhelper.WriterHelper, backend backend) {
 	}
 	fstab = append(fstab, "")
 
-	w.WriteFile("/etc/fstab", strings.Join(fstab, "\n"), 0755)
+	err := w.WriteFile("/etc/fstab", strings.Join(fstab, "\n"), 0755)
+	return err
+}
+
+func stripCompressionSuffix(module string) (string, error) {
+	for suffix := range suffixes {
+		if strings.HasSuffix(module, suffix) {
+			// The suffix is the complete thing - ".ko.foobar"
+			// Reinstate the required ".ko" part, after trimming.
+			return strings.TrimSuffix(module, suffix) + ".ko", nil
+		}
+	}
+	return "", errors.New("Module extension/suffix unknown")
+}
+
+func (m *Machine) generateModulesDep(w *writerhelper.WriterHelper, moddir string, modules map[string]bool) error {
+	output := make([]string, len(modules))
+	release, _ := m.backend.KernelRelease()
+	i := 0
+	for mod := range modules {
+		modpath, _ := stripCompressionSuffix(getModPath(mod, release)) // CANNOT fail
+		deplist := getModDepends(mod, release)                         // CANNOT fail
+		deps := make([]string, len(deplist))
+		for j, dep := range deplist {
+			deppath, _ := stripCompressionSuffix(getModPath(dep, release)) // CANNOT fail
+			deps[j] = deppath
+		}
+		output[i] = fmt.Sprintf("%s: %s", modpath, strings.Join(deps, " "))
+		i += 1
+	}
+
+	path := path.Join(moddir, "modules.dep")
+	return w.WriteFile(path, strings.Join(output, "\n"), 0644)
 }
 
 func (m *Machine) SetEnviron(environ []string) {
 	m.Environ = environ
 }
 
-
 func (m *Machine) writerKernelModules(w *writerhelper.WriterHelper, moddir string, modules []string) error {
 	if len(modules) == 0 {
 		return nil
 	}
 
-	modfiles := []string {"modules.order",
-			"modules.builtin",
-			"modules.dep",
-			"modules.dep.bin",
-			"modules.alias",
-			"modules.alias.bin",
-			"modules.softdep",
-			"modules.symbols",
-			"modules.symbols.bin",
-			"modules.builtin.bin",
-			"modules.devname"}
+	modfiles := []string{
+		"modules.builtin",
+		"modules.alias",
+		"modules.symbols"}
 
 	for _, v := range modfiles {
 		if err := w.CopyFile(moddir + "/" + v); err != nil {
@@ -491,12 +533,13 @@ func (m *Machine) writerKernelModules(w *writerhelper.WriterHelper, moddir strin
 
 	copiedModules := make(map[string]bool)
 
-	for _, modname := range modules  {
+	for _, modname := range modules {
 		if err := m.copyModules(w, modname, copiedModules); err != nil {
 			return err
 		}
 	}
-	return nil
+
+	return m.generateModulesDep(w, moddir, copiedModules)
 }
 
 func (m *Machine) setupscratch() error {
@@ -533,7 +576,7 @@ func (m *Machine) cleanup() {
 func (m *Machine) startup(command string, extracontent [][2]string) (int, error) {
 	defer m.cleanup()
 
-	os.Setenv("PATH", os.Getenv("PATH") + ":/sbin:/usr/sbin")
+	os.Setenv("PATH", os.Getenv("PATH")+":/sbin:/usr/sbin")
 
 	tmpdir, err := ioutil.TempDir("", "fakemachine-")
 	if err != nil {
@@ -556,35 +599,52 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 
 	backend := m.backend
 
-	_, kernelModuleDir, err := backend.KernelPath()
+	kernelModuleDir, err := backend.ModulePath()
 	if err != nil {
 		return -1, err
 	}
 
 	w := writerhelper.NewWriterHelper(f)
 
-	w.WriteDirectory("/scratch", 01777)
-	w.WriteDirectory("/var/tmp", 01777)
-	w.WriteDirectory("/var/lib/dbus", 0755)
+	err = w.WriteDirectories([]writerhelper.WriteDirectory{
+		{Directory: "/scratch", Perm: 01777},
+		{Directory: "/var/tmp", Perm: 01777},
+		{Directory: "/var/lib/dbus", Perm: 0755},
+		{Directory: "/tmp", Perm: 01777},
+		{Directory: "/sys", Perm: 0755},
+		{Directory: "/proc", Perm: 0755},
+		{Directory: "/run", Perm: 0755},
+		{Directory: "/usr", Perm: 0755},
+		{Directory: "/usr/bin", Perm: 0755},
+		{Directory: "/lib64", Perm: 0755},
+	})
+	if err != nil {
+		return -1, err
+	}
 
-	w.WriteDirectory("/tmp", 01777)
-	w.WriteDirectory("/sys", 0755)
-	w.WriteDirectory("/proc", 0755)
-	w.WriteDirectory("/run", 0755)
-	w.WriteDirectory("/usr", 0755)
-	w.WriteDirectory("/usr/bin", 0755)
-	w.WriteDirectory("/lib64", 0755)
-
-	w.WriteSymlink("/run", "/var/run", 0755)
+	err = w.WriteSymlink("/run", "/var/run", 0755)
+	if err != nil {
+		return -1, err
+	}
 
 	if mergedUsrSystem() {
-		w.WriteSymlink("/usr/sbin", "/sbin", 0755)
-		w.WriteSymlink("/usr/bin", "/bin", 0755)
-		w.WriteSymlink("/usr/lib", "/lib", 0755)
+		err = w.WriteSymlinks([]writerhelper.WriteSymlink{
+			{Target: "/usr/sbin", Link: "/sbin", Perm: 0755},
+			{Target: "/usr/bin", Link: "/bin", Perm: 0755},
+			{Target: "/usr/lib", Link: "/lib", Perm: 0755},
+		})
+		if err != nil {
+			return -1, err
+		}
 	} else {
-		w.WriteDirectory("/sbin", 0755)
-		w.WriteDirectory("/bin", 0755)
-		w.WriteDirectory("/lib", 0755)
+		err = w.WriteDirectories([]writerhelper.WriteDirectory{
+			{Directory: "/sbin", Perm: 0744},
+			{Directory: "/bin", Perm: 0755},
+			{Directory: "/lib", Perm: 0755},
+		})
+		if err != nil {
+			return -1, err
+		}
 	}
 
 	prefix := ""
@@ -597,63 +657,139 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 	if err != nil {
 		return -1, err
 	}
-	w.CopyFileTo(busybox, prefix + "/bin/busybox")
+	err = w.CopyFileTo(busybox, prefix+"/bin/busybox")
+	if err != nil {
+		return -1, err
+	}
 
 	/* Amd64 dynamic linker */
-	w.CopyFile("/lib64/ld-linux-x86-64.so.2")
+	err = w.CopyFile("/lib64/ld-linux-x86-64.so.2")
+	if err != nil {
+		return -1, err
+	}
 
 	/* C libraries */
 	libraryDir, err := realDir("/lib64/ld-linux-x86-64.so.2")
 	if err != nil {
 		return -1, err
 	}
-	w.CopyFile(libraryDir + "/libc.so.6")
-	w.CopyFile(libraryDir + "/libresolv.so.2")
+	err = w.CopyFile(libraryDir + "/libc.so.6")
+	if err != nil {
+		return -1, err
+	}
+	err = w.CopyFile(libraryDir + "/libresolv.so.2")
+	if err != nil {
+		return -1, err
+	}
 
-	w.WriteCharDevice("/dev/console", 5, 1, 0700)
+	err = w.WriteCharDevice("/dev/console", 5, 1, 0700)
+	if err != nil {
+		return -1, err
+	}
 
 	// Linker configuration
-	w.CopyFile("/etc/ld.so.conf")
-	w.CopyTree("/etc/ld.so.conf.d")
+	err = w.CopyFile("/etc/ld.so.conf")
+	if err != nil {
+		return -1, err
+	}
+
+	err = w.CopyTree("/etc/ld.so.conf.d")
+	if err != nil {
+		return -1, err
+	}
 
 	// Core system configuration
-	w.WriteFile("/etc/machine-id", "", 0444)
-	w.WriteFile("/etc/hostname", "fakemachine", 0444)
+	err = w.WriteFile("/etc/machine-id", "", 0444)
+	if err != nil {
+		return -1, err
+	}
 
-	w.CopyFile("/etc/passwd")
-	w.CopyFile("/etc/group")
-	w.CopyFile("/etc/nsswitch.conf")
+	err = w.WriteFile("/etc/hostname", "fakemachine", 0444)
+	if err != nil {
+		return -1, err
+	}
+
+	err = w.CopyFile("/etc/passwd")
+	if err != nil {
+		return -1, err
+	}
+
+	err = w.CopyFile("/etc/group")
+	if err != nil {
+		return -1, err
+	}
+
+	err = w.CopyFile("/etc/nsswitch.conf")
+	if err != nil {
+		return -1, err
+	}
 
 	// udev rules
 	udevRules := strings.Join(backend.UdevRules(), "\n") + "\n"
-	w.WriteFile("/etc/udev/rules.d/61-fakemachine.rules", udevRules, 0444)
+	err = w.WriteFile("/etc/udev/rules.d/61-fakemachine.rules", udevRules, 0444)
+	if err != nil {
+		return -1, err
+	}
 
-	w.WriteFile("/etc/systemd/network/ethernet.network",
+	err = w.WriteFile("/etc/systemd/network/ethernet.network",
 		fmt.Sprintf(networkdTemplate, backend.NetworkdMatch()), 0444)
-	w.WriteSymlink(
+	if err != nil {
+		return -1, err
+	}
+
+	err = w.WriteSymlink(
 		"/lib/systemd/resolv.conf",
 		"/etc/resolv.conf",
 		0755)
+	if err != nil {
+		return -1, err
+	}
 
-	m.writerKernelModules(w, kernelModuleDir, backend.InitrdModules())
+	err = m.writerKernelModules(w, kernelModuleDir, backend.InitModules())
+	if err != nil {
+		return -1, err
+	}
 
-	w.WriteFile("etc/systemd/system/fakemachine.service",
+	err = w.WriteFile("etc/systemd/system/fakemachine.service",
 		fmt.Sprintf(serviceTemplate, backend.JobOutputTTY(), strings.Join(m.Environ, " ")), 0644)
+	if err != nil {
+		return -1, err
+	}
 
-	w.WriteSymlink(
+	err = w.WriteSymlink(
 		"/lib/systemd/system/serial-getty@ttyS0.service",
 		"/dev/null",
 		0755)
+	if err != nil {
+		return -1, err
+	}
 
-	w.WriteFile("/wrapper",
+	err = w.WriteFile("/wrapper",
 		fmt.Sprintf(commandWrapper, backend.Name(), command), 0755)
+	if err != nil {
+		return -1, err
+	}
 
-	w.WriteFileRaw("/init", executeInitScriptTemplate(m, backend), 0755)
+	init, err := executeInitScriptTemplate(m, backend)
+	if err != nil {
+		return -1, err
+	}
 
-	m.generateFstab(w, backend)
+	err = w.WriteFileRaw("/init", init, 0755)
+	if err != nil {
+		return -1, err
+	}
+
+	err = m.generateFstab(w, backend)
+	if err != nil {
+		return -1, err
+	}
 
 	for _, v := range extracontent {
-		w.CopyFileTo(v[0], v[1])
+		err = w.CopyFileTo(v[0], v[1])
+		if err != nil {
+			return -1, err
+		}
 	}
 
 	w.Close()
