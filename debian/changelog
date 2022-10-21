@@ -1,11 +1,11 @@
-golang-github-go-debos-fakemachine (0.0.3-1) UNRELEASED; urgency=medium
+golang-github-go-debos-fakemachine (0.0.3-1) unstable; urgency=medium
 
   * Team upload.
   * New upstream version 0.0.3
   * Point d/watch at tagged releases
   * Add missing Build-Depends
 
- -- Christopher Obbard <chris.obbard@collabora.com>  Fri, 21 Oct 2022 12:58:13 +0100
+ -- Christopher Obbard <chris.obbard@collabora.com>  Fri, 21 Oct 2022 12:58:57 +0100
 
 golang-github-go-debos-fakemachine (0.0~git20210901.fc48786-1) unstable; urgency=medium
 
