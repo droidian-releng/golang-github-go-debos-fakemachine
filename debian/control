@@ -13,6 +13,8 @@ Build-Depends: debhelper-compat (= 12),
                golang-golang-x-sys-dev,
                golang-go-flags-dev,
                golang-github-stretchr-testify-dev,
+               golang-github-klauspost-compress-dev,
+               golang-github-ulikunitz-xz-dev,
 # need for tests
 #               busybox,
 #               qemu-system
