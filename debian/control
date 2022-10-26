@@ -31,10 +31,12 @@ Depends:
  busybox | busybox-static,
  qemu-system-x86,
  systemd,
- systemd-resolved,
  ${misc:Depends},
  ${shlibs:Depends},
-Recommends: e2fsprogs, linux-image-amd64
+Recommends:
+ e2fsprogs,
+ linux-image-amd64,
+ systemd-resolved,
 Suggests: libslirp-helper, user-mode-linux
 Description: create and spawn virtual machines
  Create and spawn virtual machines based on the currently running system.
