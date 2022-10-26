@@ -39,7 +39,14 @@ Description: create and spawn virtual machines for building images with debos
 Package: golang-github-go-debos-fakemachine-dev
 Architecture: amd64
 Built-Using: ${misc:Built-Using}
-Depends: ${shlibs:Depends},
+Depends: golang-github-docker-go-units-dev,
+         golang-github-surma-gocpio-dev,
+         golang-golang-x-sys-dev,
+         golang-go-flags-dev,
+         golang-github-stretchr-testify-dev,
+         golang-github-klauspost-compress-dev,
+         golang-github-ulikunitz-xz-dev,
+         ${shlibs:Depends},
          ${misc:Depends}
 Description: create and spawn virtual machines for building images with debos
  Create and spawn virtual machines for building images with debos tool.
