@@ -5,6 +5,7 @@ golang-github-go-debos-fakemachine (0.0.3-2) UNRELEASED; urgency=medium
   * Depend on go libraries
   * Depend on systemd-resolved (Closes: #1020690)
   * Add user-mode-linux to Suggests
+  * Switch to DEP-14 branch names
 
  -- Christopher Obbard <chris.obbard@collabora.com>  Wed, 26 Oct 2022 14:23:49 +0100
 
