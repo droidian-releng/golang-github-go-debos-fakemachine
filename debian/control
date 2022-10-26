@@ -29,6 +29,7 @@ Built-Using: ${misc:Built-Using}
 Depends: busybox | busybox-static,
          qemu-system-x86,
          systemd,
+         systemd-resolved,
          ${shlibs:Depends},
          ${misc:Depends}
 Recommends: e2fsprogs,
