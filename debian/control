@@ -34,6 +34,8 @@ Depends: busybox | busybox-static,
          ${misc:Depends}
 Recommends: e2fsprogs,
             linux-image-amd64
+Suggests: user-mode-linux,
+          libslirp-helper
 Description: create and spawn virtual machines for building images with debos
  Create and spawn virtual machines for building images with debos tool.
 
