@@ -36,8 +36,8 @@ Recommends: e2fsprogs,
             linux-image-amd64
 Suggests: user-mode-linux,
           libslirp-helper
-Description: create and spawn virtual machines for building images with debos
- Create and spawn virtual machines for building images with debos tool.
+Description: create and spawn virtual machines
+ Create and spawn virtual machines based on the currently running system.
 
 Package: golang-github-go-debos-fakemachine-dev
 Architecture: amd64
@@ -51,6 +51,6 @@ Depends: golang-github-docker-go-units-dev,
          golang-github-ulikunitz-xz-dev,
          ${shlibs:Depends},
          ${misc:Depends}
-Description: create and spawn virtual machines for building images with debos
- Create and spawn virtual machines for building images with debos tool.
+Description: create and spawn virtual machines
+ Create and spawn virtual machines based on the currently running system.
  (development libraries)
