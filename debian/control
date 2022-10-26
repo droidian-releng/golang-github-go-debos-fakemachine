@@ -16,9 +16,6 @@ Build-Depends: debhelper-compat (= 12),
                golang-github-stretchr-testify-dev,
                golang-github-klauspost-compress-dev,
                golang-github-ulikunitz-xz-dev,
-# need for tests
-#               busybox,
-#               qemu-system
 Standards-Version: 4.5.1
 Rules-Requires-Root: no
 Homepage: https://github.com/go-debos/fakemachine
