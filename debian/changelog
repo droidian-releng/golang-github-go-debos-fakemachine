@@ -1,9 +1,9 @@
-golang-github-go-debos-fakemachine (0.0.3-3) UNRELEASED; urgency=medium
+golang-github-go-debos-fakemachine (0.0.3-3) unstable; urgency=medium
 
   * Bump Standards-Version to 4.6.1
   * Downgrade systemd-resolved to Recommends
 
- -- Christopher Obbard <chris.obbard@collabora.com>  Wed, 26 Oct 2022 18:07:53 +0100
+ -- Christopher Obbard <chris.obbard@collabora.com>  Thu, 27 Oct 2022 08:59:53 +0100
 
 golang-github-go-debos-fakemachine (0.0.3-2) unstable; urgency=medium
 
