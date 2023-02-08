@@ -1,13 +1,16 @@
-# fakemchine - fake a machine
+# fakemachine - fake a machine
 
-Creates a vm based on the currently running system.
+Creates a virtual machine based on the currently running system.
 
 ## Synopsis
 
-  fakemachine [OPTIONS]
-
 ```
+fakemachine [options] <command to run inside machine>
+fakemachine [--help]
+```
+
 Application Options:
+```
   -b, --backend=[auto|kvm|uml|qemu] Virtualisation backend to use (default: auto)
   -v, --volume=                     volume to mount
   -i, --image=                      image to add
