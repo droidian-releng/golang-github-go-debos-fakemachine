@@ -38,8 +38,10 @@ Recommends:
  linux-image-amd64,
  systemd-resolved,
 Suggests: libslirp-helper, user-mode-linux
-Description: create and spawn virtual machines
+Description: Create and spawn virtual machines (program)
  Create and spawn virtual machines based on the currently running system.
+ .
+ This package contains the fakemachine program.
 
 Package: golang-github-go-debos-fakemachine-dev
 Architecture: amd64
@@ -54,6 +56,7 @@ Depends:
  golang-golang-x-sys-dev,
  ${misc:Depends},
  ${shlibs:Depends},
-Description: create and spawn virtual machines
+Description: create and spawn virtual machines (library)
  Create and spawn virtual machines based on the currently running system.
- (development libraries)
+ .
+ This package contains the library.
