@@ -13,12 +13,13 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
 
-	"github.com/go-debos/fakemachine/cpio"
+	writerhelper "github.com/go-debos/fakemachine/cpio"
 )
 
 func mergedUsrSystem() bool {
@@ -162,6 +163,7 @@ type Machine struct {
 	memory   int
 	numcpus  int
 	showBoot bool
+	quiet    bool
 	Environ  []string
 
 	scratchsize int64
@@ -272,8 +274,7 @@ if [ $? != 0 ]; then
   exit
 fi
 
-echo Running '%[2]s' using '%[1]s' backend
-%[2]s
+%[1]s
 echo $? > /run/fakemachine/result
 `
 
@@ -294,7 +295,7 @@ Environment=HOME=/root IN_FAKE_MACHINE=yes %[2]s
 WorkingDirectory=-/scratch
 ExecStart=/wrapper
 ExecStopPost=/bin/sync
-ExecStopPost=/bin/systemctl poweroff -ff
+ExecStopPost=/bin/systemctl poweroff -q -ff
 Type=idle
 TTYPath=%[1]s
 StandardInput=tty-force
@@ -446,6 +447,13 @@ func (m *Machine) SetShowBoot(showBoot bool) {
 	m.showBoot = showBoot
 }
 
+// SetQuiet sets whether fakemachine should print additional information (e.g.
+// the command to be ran) or just print the stdout/stderr of the command to be
+// ran.
+func (m *Machine) SetQuiet(quiet bool) {
+	m.quiet = quiet
+}
+
 // SetScratch sets the size and location of on-disk scratch space to allocate
 // (sparsely) for /scratch. If not set /scratch will be backed by memory. If
 // Path is "" then the working directory is used as a default storage location
@@ -578,6 +586,25 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 
 	os.Setenv("PATH", os.Getenv("PATH")+":/sbin:/usr/sbin")
 
+	/* Sanity check mountpoints */
+	for _, v := range m.mounts {
+		/* Check the directory exists on the host */
+		stat, err := os.Stat(v.hostDirectory)
+		if err != nil || !stat.IsDir() {
+			return -1, fmt.Errorf("Couldn't mount %s inside machine: expected a directory", v.hostDirectory)
+		}
+
+		/* Check for whitespace in the machine directory */
+		if regexp.MustCompile(`\s`).MatchString(v.machineDirectory) {
+			return -1, fmt.Errorf("Couldn't mount %s inside machine: machine directory (%s) contains whitespace", v.hostDirectory, v.machineDirectory)
+		}
+
+		/* Check for whitespace in the label */
+		if regexp.MustCompile(`\s`).MatchString(v.label) {
+			return -1, fmt.Errorf("Couldn't mount %s inside machine: label (%s) contains whitespace", v.hostDirectory, v.label)
+		}
+	}
+
 	tmpdir, err := ioutil.TempDir("", "fakemachine-")
 	if err != nil {
 		return -1, err
@@ -659,6 +686,11 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 	}
 	err = w.CopyFileTo(busybox, prefix+"/bin/busybox")
 	if err != nil {
+		return -1, err
+	}
+
+	/* Ensure systemd-resolved is available */
+	if _, err := os.Stat("/lib/systemd/systemd-resolved"); err != nil {
 		return -1, err
 	}
 
@@ -765,7 +797,7 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 	}
 
 	err = w.WriteFile("/wrapper",
-		fmt.Sprintf(commandWrapper, backend.Name(), command), 0755)
+		fmt.Sprintf(commandWrapper, command), 0755)
 	if err != nil {
 		return -1, err
 	}
@@ -794,6 +826,10 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 
 	w.Close()
 	f.Close()
+
+	if !m.quiet {
+		fmt.Printf("Running %s using %s backend\n", command, backend.Name())
+	}
 
 	success, err := backend.Start()
 	if !success || err != nil {
