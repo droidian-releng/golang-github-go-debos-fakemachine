@@ -1,5 +1,4 @@
-//go:build linux && amd64
-// +build linux,amd64
+//go:build linux && (arm64 || amd64)
 
 package fakemachine
 
@@ -68,6 +67,16 @@ func getModDepends(modname string, kernelRelease string) []string {
 		}
 	}
 
+	// Busybox expects a full dependency list for each module rather than just
+	// direct dependencies, so recurse the module dependency tree:
+	// https://github.com/mirror/busybox/blob/1dd2685dcc735496d7adde87ac60b9434ed4a04c/modutils/modprobe.c#L46-L49
+	var sublist []string
+	for _, mod := range modlist {
+		sublist = append(sublist, getModDepends(mod, kernelRelease)...)
+	}
+
+	modlist = append(modlist, sublist...)
+
 	return modlist
 }
 
@@ -82,7 +91,7 @@ func (m *Machine) copyModules(w *writerhelper.WriterHelper, modname string, copi
 	release, _ := m.backend.KernelRelease()
 	modpath := getModPath(modname, release)
 	if modpath == "" {
-		return errors.New("Modules path couldn't be determined")
+		return errors.New("modules path couldn't be determined")
 	}
 
 	if modpath == "(builtin)" || copiedModules[modname] {
@@ -114,7 +123,7 @@ func (m *Machine) copyModules(w *writerhelper.WriterHelper, modname string, copi
 		}
 	}
 	if !found {
-		return errors.New("Module extension/suffix unknown")
+		return errors.New("module extension/suffix unknown")
 	}
 
 	copiedModules[modname] = true
@@ -143,6 +152,23 @@ func realDir(path string) (string, error) {
 	return filepath.Dir(p), nil
 }
 
+type Arch string
+
+const (
+	Amd64 Arch = "amd64"
+	Arm64 Arch = "arm64"
+)
+
+var archMap = map[string]Arch{
+	"amd64": Amd64,
+	"arm64": Arm64,
+}
+
+var archDynamicLinker = map[Arch]string{
+	Amd64: "/lib64/ld-linux-x86-64.so.2",
+	Arm64: "/lib/ld-linux-aarch64.so.1",
+}
+
 type mountPoint struct {
 	hostDirectory    string
 	machineDirectory string
@@ -156,6 +182,7 @@ type image struct {
 }
 
 type Machine struct {
+	arch     Arch
 	backend  backend
 	mounts   []mountPoint
 	count    int
@@ -182,6 +209,11 @@ func NewMachine() (*Machine, error) {
 func NewMachineWithBackend(backendName string) (*Machine, error) {
 	var err error
 	m := &Machine{memory: 2048, numcpus: runtime.NumCPU()}
+
+	var ok bool
+	if m.arch, ok = archMap[runtime.GOARCH]; !ok {
+		return nil, fmt.Errorf("unsupported arch %s", runtime.GOARCH)
+	}
 
 	m.backend, err = newBackend(backendName, m)
 	if err != nil {
@@ -395,12 +427,12 @@ func (m *Machine) CreateImageWithLabel(path string, size int64, label string) (s
 	}
 
 	if len(label) >= 20 {
-		return "", fmt.Errorf("Label '%s' too long; cannot be more then 20 characters", label)
+		return "", fmt.Errorf("label '%s' too long; cannot be more then 20 characters", label)
 	}
 
 	for _, image := range m.images {
 		if image.label == label {
-			return "", fmt.Errorf("Label '%s' already exists", label)
+			return "", fmt.Errorf("label '%s' already exists", label)
 		}
 	}
 
@@ -496,7 +528,7 @@ func stripCompressionSuffix(module string) (string, error) {
 			return strings.TrimSuffix(module, suffix) + ".ko", nil
 		}
 	}
-	return "", errors.New("Module extension/suffix unknown")
+	return "", errors.New("module extension/suffix unknown")
 }
 
 func (m *Machine) generateModulesDep(w *writerhelper.WriterHelper, moddir string, modules map[string]bool) error {
@@ -591,17 +623,17 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 		/* Check the directory exists on the host */
 		stat, err := os.Stat(v.hostDirectory)
 		if err != nil || !stat.IsDir() {
-			return -1, fmt.Errorf("Couldn't mount %s inside machine: expected a directory", v.hostDirectory)
+			return -1, fmt.Errorf("couldn't mount %s inside machine: expected a directory", v.hostDirectory)
 		}
 
 		/* Check for whitespace in the machine directory */
 		if regexp.MustCompile(`\s`).MatchString(v.machineDirectory) {
-			return -1, fmt.Errorf("Couldn't mount %s inside machine: machine directory (%s) contains whitespace", v.hostDirectory, v.machineDirectory)
+			return -1, fmt.Errorf("couldn't mount %s inside machine: machine directory (%s) contains whitespace", v.hostDirectory, v.machineDirectory)
 		}
 
 		/* Check for whitespace in the label */
 		if regexp.MustCompile(`\s`).MatchString(v.label) {
-			return -1, fmt.Errorf("Couldn't mount %s inside machine: label (%s) contains whitespace", v.hostDirectory, v.label)
+			return -1, fmt.Errorf("couldn't mount %s inside machine: label (%s) contains whitespace", v.hostDirectory, v.label)
 		}
 	}
 
@@ -659,6 +691,7 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 			{Target: "/usr/sbin", Link: "/sbin", Perm: 0755},
 			{Target: "/usr/bin", Link: "/bin", Perm: 0755},
 			{Target: "/usr/lib", Link: "/lib", Perm: 0755},
+			{Target: "/usr/lib64", Link: "/lib64", Perm: 0755},
 		})
 		if err != nil {
 			return -1, err
@@ -694,14 +727,14 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 		return -1, err
 	}
 
-	/* Amd64 dynamic linker */
-	err = w.CopyFile("/lib64/ld-linux-x86-64.so.2")
+	dynamicLinker := archDynamicLinker[m.arch]
+	err = w.CopyFile(prefix + dynamicLinker)
 	if err != nil {
 		return -1, err
 	}
 
 	/* C libraries */
-	libraryDir, err := realDir("/lib64/ld-linux-x86-64.so.2")
+	libraryDir, err := realDir(dynamicLinker)
 	if err != nil {
 		return -1, err
 	}
@@ -833,7 +866,7 @@ func (m *Machine) startup(command string, extracontent [][2]string) (int, error)
 
 	success, err := backend.Start()
 	if !success || err != nil {
-		return -1, fmt.Errorf("error starting %s backend: %v", backend.Name(), err)
+		return -1, fmt.Errorf("error starting %s backend: %w", backend.Name(), err)
 	}
 
 	result, err := os.Open(path.Join(tmpdir, "result"))
@@ -867,7 +900,7 @@ func (m *Machine) RunInMachineWithArgs(args []string) (int, error) {
 	executable, err := exec.LookPath(os.Args[0])
 
 	if err != nil {
-		return -1, fmt.Errorf("Failed to find executable: %v\n", err)
+		return -1, fmt.Errorf("failed to find executable: %w", err)
 	}
 
 	return m.startup(command, [][2]string{{executable, name}})

@@ -1,5 +1,5 @@
-//go:build linux && amd64
-// +build linux,amd64
+//go:build linux
+// +build linux
 
 package fakemachine
 
@@ -27,6 +27,11 @@ func (b umlBackend) Name() string {
 }
 
 func (b umlBackend) Supported() (bool, error) {
+	// only support amd64
+	if b.machine.arch != Amd64 {
+		return false, fmt.Errorf("unsupported arch: %s", b.machine.arch)
+	}
+
 	// check the kernel exists
 	if _, err := b.KernelPath(); err != nil {
 		return false, err
@@ -45,7 +50,7 @@ func (b umlBackend) Supported() (bool, error) {
 }
 
 func (b umlBackend) KernelRelease() (string, error) {
-	return "", errors.New("Not implemented")
+	return "", errors.New("not implemented")
 }
 
 func (b umlBackend) KernelPath() (string, error) {
@@ -162,7 +167,7 @@ func (b umlBackend) Start() (bool, error) {
 	// one of the sockets will be attached to the slirp-helper
 	slirpHelperSocket := os.NewFile(uintptr(netSocketpair[0]), "")
 	if slirpHelperSocket == nil {
-		return false, fmt.Errorf("Creation of slirpHelperSocket failed")
+		return false, fmt.Errorf("creation of slirpHelperSocket failed")
 	}
 	defer slirpHelperSocket.Close()
 

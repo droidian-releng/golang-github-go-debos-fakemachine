@@ -1,5 +1,5 @@
-//go:build linux && amd64
-// +build linux,amd64
+//go:build linux
+// +build linux
 
 package fakemachine
 
@@ -71,7 +71,7 @@ func newBackend(name string, m *Machine) (backend, error) {
 
 	// check backend is supported
 	if supported, err := b.Supported(); !supported {
-		return nil, fmt.Errorf("%s backend not supported: %v", name, err)
+		return nil, fmt.Errorf("%s backend not supported: %w", name, err)
 	}
 
 	return b, nil
