@@ -211,6 +211,7 @@ func (b qemuBackend) StartQemu(kvm bool) (bool, error) {
 		"-kernel", kernelPath,
 		"-initrd", m.initrdpath,
 		"-display", "none",
+		"-nic", "user,model=virtio-net-pci",
 		"-no-reboot"}
 
 	if kvm {
@@ -235,6 +236,7 @@ func (b qemuBackend) StartQemu(kvm bool) (bool, error) {
 		qemuargs = append(qemuargs,
 			"-chardev", "stdio,id=for-ttyS0,signal=off",
 			"-serial", "chardev:for-ttyS0")
+		kernelargs = append(kernelargs, "loglevel=7")
 	} else {
 		qemuargs = append(qemuargs,
 			// Create the bus for virtio consoles
