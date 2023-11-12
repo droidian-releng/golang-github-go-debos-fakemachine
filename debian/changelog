@@ -1,3 +1,11 @@
+golang-github-go-debos-fakemachine (0.0.7-1) unstable; urgency=medium
+
+  * New upstream version 0.0.7
+  * Update obbardc's email address in Maintainers
+  * Add golang-github-alessio-shellescape-dev to Build-Depends
+
+ -- Christopher Obbard <obbardc@debian.org>  Sun, 12 Nov 2023 13:18:56 +0000
+
 golang-github-go-debos-fakemachine (0.0.6-1) unstable; urgency=medium
 
   * New upstream version 0.0.6
