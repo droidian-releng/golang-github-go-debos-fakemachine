@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"github.com/alessio/shellescape"
 	"github.com/docker/go-units"
 	"github.com/go-debos/fakemachine"
 	"github.com/jessevdk/go-flags"
@@ -141,8 +143,8 @@ func main() {
 
 	args, err := parser.Parse()
 	if err != nil {
-		flagsErr, ok := err.(*flags.Error)
-		if ok && flagsErr.Type == flags.ErrHelp {
+		var flagsErr *flags.Error
+		if errors.As(err, &flagsErr) && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 		} else {
 			os.Exit(1)
@@ -180,7 +182,7 @@ func main() {
 
 	command := "/bin/bash"
 	if len(args) > 0 {
-		command = strings.Join(args, " ")
+		command = shellescape.QuoteCommand(args)
 	}
 
 	ret, err := m.Run(command)
