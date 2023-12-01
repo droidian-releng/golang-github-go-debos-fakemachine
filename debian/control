@@ -47,7 +47,7 @@ Description: Create and spawn virtual machines (program)
  This package contains the fakemachine program.
 
 Package: golang-github-go-debos-fakemachine-dev
-Architecture: amd64
+Architecture: amd64 arm64
 Built-Using: ${misc:Built-Using}
 Depends:
  golang-github-alessio-shellescape-dev,
