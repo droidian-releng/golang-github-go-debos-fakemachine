@@ -1,3 +1,13 @@
+golang-github-go-debos-fakemachine (0.0.8-1) unstable; urgency=medium
+
+  [ Arnaud Ferraris ]
+  * d/control: also build -dev package for arm64
+
+  [ Christopher Obbard ]
+  * New upstream version 0.0.8
+
+ -- Christopher Obbard <obbardc@debian.org>  Wed, 10 Jan 2024 16:50:45 +0000
+
 golang-github-go-debos-fakemachine (0.0.7-2) unstable; urgency=medium
 
   [ Arnaud Rebillout ]
