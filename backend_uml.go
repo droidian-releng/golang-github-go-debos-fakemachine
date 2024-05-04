@@ -1,5 +1,5 @@
+//go:build linux
 // +build linux
-// +build amd64 and arm64 and arm
 
 package fakemachine
 
@@ -27,9 +27,18 @@ func (b umlBackend) Name() string {
 }
 
 func (b umlBackend) Supported() (bool, error) {
+	// only support amd64
+	if b.machine.arch != Amd64 {
+		return false, fmt.Errorf("unsupported arch: %s", b.machine.arch)
+	}
+
 	// check the kernel exists
-	_, _, err := b.KernelPath()
-	if err != nil {
+	if _, err := b.KernelPath(); err != nil {
+		return false, err
+	}
+
+	// check the modules exist
+	if _, err := b.ModulePath(); err != nil {
 		return false, err
 	}
 
@@ -41,42 +50,41 @@ func (b umlBackend) Supported() (bool, error) {
 }
 
 func (b umlBackend) KernelRelease() (string, error) {
-	return "", errors.New("Not implemented")
+	return "", errors.New("not implemented")
 }
 
-func (b umlBackend) KernelPath() (string, string, error) {
+func (b umlBackend) KernelPath() (string, error) {
 	// find the UML binary
 	kernelPath, err := exec.LookPath("linux.uml")
 	if err != nil {
-		return "", "", fmt.Errorf("user-mode-linux not installed")
+		return "", fmt.Errorf("user-mode-linux not installed")
 	}
+	return kernelPath, nil
+}
 
+func (b umlBackend) ModulePath() (string, error) {
 	// make sure the UML modules exist
 	// on non-merged usr systems the modules still reside under /usr/lib/uml
 	moddir := "/usr/lib/uml/modules"
 	if _, err := os.Stat(moddir); err != nil {
-		return "", "", fmt.Errorf("user-mode-linux modules not installed")
+		return "", fmt.Errorf("user-mode-linux modules not installed")
 	}
 
 	// find the subdirectory containing the modules for the UML release
 	modSubdirs, err := ioutil.ReadDir(moddir)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	if len(modSubdirs) != 1 {
-		return "", "", fmt.Errorf("could not determine which user-mode-linux modules to use")
+		return "", fmt.Errorf("could not determine which user-mode-linux modules to use")
 	}
 	moddir = path.Join(moddir, modSubdirs[0].Name())
 
-	return kernelPath, moddir, nil
+	return moddir, nil
 }
 
 func (b umlBackend) SlirpHelperPath() (string, error) {
 	return exec.LookPath("libslirp-helper")
-}
-
-func (b umlBackend) InitrdModules() []string {
-	return []string{}
 }
 
 func (b umlBackend) UdevRules() []string {
@@ -90,10 +98,6 @@ func (b umlBackend) UdevRules() []string {
 			fmt.Sprintf(`KERNEL=="ubd%c[0-9]", SYMLINK+="disk/by-fakemachine-label/%s-part%%n"`, driveLetter, img.label))
 	}
 	return udevRules
-}
-
-func (b umlBackend) NetworkdMatch() string {
-	return "vec*"
 }
 
 func (b umlBackend) JobOutputTTY() string {
@@ -117,7 +121,7 @@ func (b umlBackend) InitModules() []string {
 func (b umlBackend) InitStaticVolumes() []mountPoint {
 	// mount the UML modules over the top of /lib/modules
 	// which currently contains the modules from the base system
-	_, moddir, _ := b.KernelPath()
+	moddir, _ := b.ModulePath()
 	moddir = path.Join(moddir, "../")
 
 	machineDir := "/lib/modules"
@@ -132,7 +136,7 @@ func (b umlBackend) InitStaticVolumes() []mountPoint {
 func (b umlBackend) Start() (bool, error) {
 	m := b.machine
 
-	kernelPath, _, err := b.KernelPath()
+	kernelPath, err := b.KernelPath()
 	if err != nil {
 		return false, err
 	}
@@ -159,7 +163,7 @@ func (b umlBackend) Start() (bool, error) {
 	// one of the sockets will be attached to the slirp-helper
 	slirpHelperSocket := os.NewFile(uintptr(netSocketpair[0]), "")
 	if slirpHelperSocket == nil {
-		return false, fmt.Errorf("Creation of slirpHelperSocket failed")
+		return false, fmt.Errorf("creation of slirpHelperSocket failed")
 	}
 	defer slirpHelperSocket.Close()
 
@@ -170,10 +174,9 @@ func (b umlBackend) Start() (bool, error) {
 	}
 	defer umlVectorTransportSocket.Close()
 
-
 	// launch libslirp-helper
 	slirpHelperArgs := []string{"libslirp-helper",
-				    "--exit-with-parent"}
+		"--exit-with-parent"}
 
 	/* attach the slirpHelperSocket as an additional fd to the process,
 	 * after std*. The helper then bridges the host network to the attached
@@ -190,8 +193,7 @@ func (b umlBackend) Start() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer slirpHelper.Kill()
-
+	defer func() { _ = slirpHelper.Kill() }()
 
 	// launch uml guest
 	memory := fmt.Sprintf("%d", m.memory)
@@ -199,7 +201,7 @@ func (b umlBackend) Start() (bool, error) {
 		"mem=" + memory + "M",
 		"initrd=" + m.initrdpath,
 		"panic=-1",
-		"nosplash",
+		"plymouth.enable=0",
 		"systemd.unit=fakemachine.service",
 		"console=tty0",
 	}
@@ -229,7 +231,7 @@ func (b umlBackend) Start() (bool, error) {
 		umlargs = append(umlargs,
 			"con1=fd:0,fd:1",
 			"con0=null",
-			"con=none")       // no other consoles
+			"con=none") // no other consoles
 	}
 
 	for i, img := range m.images {

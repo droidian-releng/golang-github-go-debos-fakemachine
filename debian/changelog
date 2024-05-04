@@ -1,4 +1,112 @@
-agolang-github-go-debos-fakemachine (0.0~git20200528.83ab90c-1) unstable; urgency=medium
+golang-github-go-debos-fakemachine (0.0.9-1) unstable; urgency=medium
+
+  * New upstream version 0.0.9
+
+ -- Christopher Obbard <obbardc@debian.org>  Wed, 17 Jan 2024 15:17:12 +0000
+
+golang-github-go-debos-fakemachine (0.0.8-1) unstable; urgency=medium
+
+  [ Arnaud Ferraris ]
+  * d/control: also build -dev package for arm64
+
+  [ Christopher Obbard ]
+  * New upstream version 0.0.8
+
+ -- Christopher Obbard <obbardc@debian.org>  Wed, 10 Jan 2024 16:50:45 +0000
+
+golang-github-go-debos-fakemachine (0.0.7-2) unstable; urgency=medium
+
+  [ Arnaud Rebillout ]
+  * Add golang-github-alessio-shellescape-dev to -dev Depends
+
+ -- Christopher Obbard <obbardc@debian.org>  Fri, 24 Nov 2023 13:33:54 +0000
+
+golang-github-go-debos-fakemachine (0.0.7-1) unstable; urgency=medium
+
+  * New upstream version 0.0.7
+  * Update obbardc's email address in Maintainers
+  * Add golang-github-alessio-shellescape-dev to Build-Depends
+
+ -- Christopher Obbard <obbardc@debian.org>  Sun, 12 Nov 2023 13:18:56 +0000
+
+golang-github-go-debos-fakemachine (0.0.6-1) unstable; urgency=medium
+
+  * New upstream version 0.0.6
+
+ -- Christopher Obbard <chris.obbard@collabora.com>  Wed, 27 Sep 2023 09:19:56 +0100
+
+golang-github-go-debos-fakemachine (0.0.5-1) unstable; urgency=medium
+
+  * Bump Standards-Version to 4.6.2
+  * New upstream version 0.0.5
+  * Build fakemachine for arm64
+
+ -- Christopher Obbard <chris.obbard@collabora.com>  Mon, 24 Jul 2023 16:23:08 +0100
+
+golang-github-go-debos-fakemachine (0.0.4-1) unstable; urgency=medium
+
+  * New upstream version 0.0.4
+  * Bump debhelper-compat to 13
+  * Ship manpage from upstream tarball
+  * lintian: Don't warn about compressed test data
+  * Improve package descriptions
+
+ -- Christopher Obbard <chris.obbard@collabora.com>  Wed, 08 Feb 2023 16:07:43 +0000
+
+golang-github-go-debos-fakemachine (0.0.3-3) unstable; urgency=medium
+
+  * Bump Standards-Version to 4.6.1
+  * Downgrade systemd-resolved to Recommends
+
+ -- Christopher Obbard <chris.obbard@collabora.com>  Thu, 27 Oct 2022 08:59:53 +0100
+
+golang-github-go-debos-fakemachine (0.0.3-2) unstable; urgency=medium
+
+  * Add myself to list of uploaders
+  * Remove comment from Build-Dep
+  * Depend on go libraries
+  * Depend on systemd-resolved (Closes: #1020690)
+  * Add user-mode-linux to Suggests
+  * Switch to DEP-14 branch names
+  * Update package description
+  * Sort d/control with wrap-and-sort
+
+ -- Christopher Obbard <chris.obbard@collabora.com>  Wed, 26 Oct 2022 15:48:26 +0100
+
+golang-github-go-debos-fakemachine (0.0.3-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream version 0.0.3
+  * Point d/watch at tagged releases
+  * Add missing Build-Depends
+
+ -- Christopher Obbard <chris.obbard@collabora.com>  Fri, 21 Oct 2022 12:58:57 +0100
+
+golang-github-go-debos-fakemachine (0.0~git20210901.fc48786-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release.
+
+ -- Dylan Aïssi <daissi@debian.org>  Mon, 20 Sep 2021 14:36:06 +0200
+
+golang-github-go-debos-fakemachine (0.0~git20201127.9e6ee78-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Add myself as an uploader.
+  * Bump Standards-Version to 4.5.1.
+  * Use dh 12.
+
+ -- Andrej Shadura <andrewsh@debian.org>  Wed, 02 Dec 2020 14:51:32 +0100
+
+golang-github-go-debos-fakemachine (0.0~git20200805.8defac2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Set upstream metadata fields: Bug-Database, Bug-Submit.
+  * Replace use of deprecated $ADTTMP with $AUTOPKGTEST_TMP.
+
+ -- Andrej Shadura <andrewsh@debian.org>  Wed, 14 Oct 2020 15:12:38 +0200
+
+golang-github-go-debos-fakemachine (0.0~git20200528.83ab90c-1) unstable; urgency=medium
 
   * New upstream snapshot.
 

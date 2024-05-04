@@ -1,8 +1,9 @@
 package writerhelper
 
 import (
+	"bytes"
+	"fmt"
 	"io"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,6 +17,19 @@ type WriterHelper struct {
 	*cpio.Writer
 }
 
+type WriteDirectory struct {
+	Directory string
+	Perm      os.FileMode
+}
+
+type WriteSymlink struct {
+	Target string
+	Link   string
+	Perm   os.FileMode
+}
+
+type Transformer func(dst io.Writer, src io.Reader) error
+
 func NewWriterHelper(f io.Writer) *WriterHelper {
 	return &WriterHelper{
 		paths:  map[string]bool{"/": true},
@@ -23,11 +37,11 @@ func NewWriterHelper(f io.Writer) *WriterHelper {
 	}
 }
 
-func (w *WriterHelper) ensureBaseDirectory(directory string) {
+func (w *WriterHelper) ensureBaseDirectory(directory string) error {
 	d := path.Clean(directory)
 
 	if w.paths[d] {
-		return
+		return nil
 	}
 
 	components := strings.Split(directory, "/")
@@ -39,12 +53,30 @@ func (w *WriterHelper) ensureBaseDirectory(directory string) {
 			continue
 		}
 
-		w.WriteDirectory(collector, 0755)
+		err := w.WriteDirectory(collector, 0755)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
-func (w *WriterHelper) WriteDirectory(directory string, perm os.FileMode) {
-	w.ensureBaseDirectory(path.Dir(directory))
+func (w *WriterHelper) WriteDirectories(directories []WriteDirectory) error {
+	for _, d := range directories {
+		err := w.WriteDirectory(d.Directory, d.Perm)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *WriterHelper) WriteDirectory(directory string, perm os.FileMode) error {
+	err := w.ensureBaseDirectory(path.Dir(directory))
+	if err != nil {
+		return err
+	}
 
 	hdr := new(cpio.Header)
 
@@ -52,17 +84,24 @@ func (w *WriterHelper) WriteDirectory(directory string, perm os.FileMode) {
 	hdr.Name = directory
 	hdr.Mode = int64(perm)
 
-	w.WriteHeader(hdr)
+	err = w.WriteHeader(hdr)
+	if err != nil {
+		return err
+	}
 
 	w.paths[directory] = true
+	return nil
 }
 
-func (w *WriterHelper) WriteFile(file, content string, perm os.FileMode) {
-	w.WriteFileRaw(file, []byte(content), perm)
+func (w *WriterHelper) WriteFile(file, content string, perm os.FileMode) error {
+	return w.WriteFileRaw(file, []byte(content), perm)
 }
 
-func (w *WriterHelper) WriteFileRaw(file string, bytes []byte, perm os.FileMode) {
-	w.ensureBaseDirectory(path.Dir(file))
+func (w *WriterHelper) WriteFileRaw(file string, bytes []byte, perm os.FileMode) error {
+	err := w.ensureBaseDirectory(path.Dir(file))
+	if err != nil {
+		return err
+	}
 
 	hdr := new(cpio.Header)
 
@@ -71,12 +110,30 @@ func (w *WriterHelper) WriteFileRaw(file string, bytes []byte, perm os.FileMode)
 	hdr.Mode = int64(perm)
 	hdr.Size = int64(len(bytes))
 
-	w.WriteHeader(hdr)
-	w.Write(bytes)
+	err = w.WriteHeader(hdr)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(bytes)
+	return err
 }
 
-func (w *WriterHelper) WriteSymlink(target, link string, perm os.FileMode) {
-	w.ensureBaseDirectory(path.Dir(link))
+func (w *WriterHelper) WriteSymlinks(links []WriteSymlink) error {
+	for _, l := range links {
+		err := w.WriteSymlink(l.Target, l.Link, l.Perm)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *WriterHelper) WriteSymlink(target, link string, perm os.FileMode) error {
+	err := w.ensureBaseDirectory(path.Dir(link))
+	if err != nil {
+		return err
+	}
+
 	hdr := new(cpio.Header)
 
 	content := []byte(target)
@@ -86,13 +143,20 @@ func (w *WriterHelper) WriteSymlink(target, link string, perm os.FileMode) {
 	hdr.Mode = int64(perm)
 	hdr.Size = int64(len(content))
 
-	w.WriteHeader(hdr)
-	w.Write(content)
+	err = w.WriteHeader(hdr)
+	if err != nil {
+		return err
+	}
+
+	_, err = w.Write(content)
+	return err
 }
 
-func (w *WriterHelper) WriteCharDevice(device string, major, minor int64,
-	perm os.FileMode) {
-	w.ensureBaseDirectory(path.Dir(device))
+func (w *WriterHelper) WriteCharDevice(device string, major, minor int64, perm os.FileMode) error {
+	err := w.ensureBaseDirectory(path.Dir(device))
+	if err != nil {
+		return err
+	}
 	hdr := new(cpio.Header)
 
 	hdr.Type = cpio.TYPE_CHAR
@@ -101,32 +165,39 @@ func (w *WriterHelper) WriteCharDevice(device string, major, minor int64,
 	hdr.Devmajor = major
 	hdr.Devminor = minor
 
-	w.WriteHeader(hdr)
+	err = w.WriteHeader(hdr)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (w *WriterHelper) CopyTree(path string) {
-	walker := func(p string, info os.FileInfo, err error) error {
+func (w *WriterHelper) CopyTree(path string) error {
+	walker := func(p string, info os.FileInfo, _ error) error {
+		var err error
 		if info.Mode().IsDir() {
-			w.WriteDirectory(p, info.Mode() & ^os.ModeType)
+			err = w.WriteDirectory(p, info.Mode() & ^os.ModeType)
 		} else if info.Mode().IsRegular() {
-			w.CopyFile(p)
+			err = w.CopyFile(p)
 		} else {
-			panic("No handled")
+			err = fmt.Errorf("file type not handled for %s", p)
 		}
 
-		return nil
+		return err
 	}
 
-	filepath.Walk(path, walker)
+	return filepath.Walk(path, walker)
 }
 
 func (w *WriterHelper) CopyFileTo(src, dst string) error {
-	w.ensureBaseDirectory(path.Dir(dst))
+	err := w.ensureBaseDirectory(path.Dir(dst))
+	if err != nil {
+		return err
+	}
 
 	f, err := os.Open(src)
 	if err != nil {
-		log.Panicf("open failed: %s - %v", src, err)
-		return err
+		return fmt.Errorf("open failed: %s - %w", src, err)
 	}
 	defer f.Close()
 
@@ -142,8 +213,57 @@ func (w *WriterHelper) CopyFileTo(src, dst string) error {
 	hdr.Mode = int64(info.Mode() & ^os.ModeType)
 	hdr.Size = info.Size()
 
-	w.WriteHeader(hdr)
-	io.Copy(w, f)
+	err = w.WriteHeader(hdr)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(w, f)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (w *WriterHelper) TransformFileTo(src, dst string, fn Transformer) error {
+	err := w.ensureBaseDirectory(path.Dir(dst))
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	out := new(bytes.Buffer)
+	err = fn(out, f)
+	if err != nil {
+		return err
+	}
+
+	hdr := new(cpio.Header)
+	hdr.Type = cpio.TYPE_REG
+	hdr.Name = dst
+	hdr.Mode = int64(info.Mode() & ^os.ModeType)
+	hdr.Size = int64(out.Len())
+
+	err = w.WriteHeader(hdr)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(w, out)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"github.com/alessio/shellescape"
 	"github.com/docker/go-units"
 	"github.com/go-debos/fakemachine"
 	"github.com/jessevdk/go-flags"
@@ -10,14 +12,15 @@ import (
 )
 
 type Options struct {
-	Backend	    string   `short:"b" long:"backend" description:"Virtualisation backend to use" default:"auto"`
-	Volumes     []string `short:"v" long:"volume" description:"volume to mount"`
-	Images      []string `short:"i" long:"image" description:"image to add"`
+	Backend     string            `short:"b" long:"backend" description:"Virtualisation backend to use" default:"auto"`
+	Volumes     []string          `short:"v" long:"volume" description:"volume to mount"`
+	Images      []string          `short:"i" long:"image" description:"image to add"`
 	EnvironVars map[string]string `short:"e" long:"environ-var" description:"Environment variables (use -e VARIABLE:VALUE syntax)"`
-	Memory      int      `short:"m" long:"memory" description:"Amount of memory for the fakemachine in megabytes"`
-	CPUs        int      `short:"c" long:"cpus" description:"Number of CPUs for the fakemachine"`
-	ScratchSize string   `short:"s" long:"scratchsize" description:"On-disk scratch space size (with a unit suffix, e.g. 4G); if unset, memory backed scratch space is used"`
-	ShowBoot    bool     `long:"show-boot" description:"Show boot/console messages from the fakemachine"`
+	Memory      int               `short:"m" long:"memory" description:"Amount of memory for the fakemachine in megabytes"`
+	CPUs        int               `short:"c" long:"cpus" description:"Number of CPUs for the fakemachine"`
+	ScratchSize string            `short:"s" long:"scratchsize" description:"On-disk scratch space size (with a unit suffix, e.g. 4G); if unset, memory backed scratch space is used"`
+	ShowBoot    bool              `long:"show-boot" description:"Show boot/console messages from the fakemachine"`
+	Quiet       bool              `short:"q" long:"quiet" description:"Don't show logs from fakemachine or the backend; only print the command's stdout/stderr"`
 }
 
 var options Options
@@ -29,8 +32,8 @@ func warnLocalhost(variable string, value string) {
 		    Consider using an address that is valid on your network.`
 
 	if strings.Contains(value, "localhost") ||
-	   strings.Contains(value, "127.0.0.1") ||
-	   strings.Contains(value, "::1") {
+		strings.Contains(value, "127.0.0.1") ||
+		strings.Contains(value, "::1") {
 		fmt.Printf(message, variable)
 	}
 }
@@ -77,7 +80,9 @@ func SetupImages(m *fakemachine.Machine, options Options) {
 			os.Exit(1)
 		}
 
-		fmt.Printf("Exposing %s as %s\n", parts[0], l)
+		if !options.Quiet {
+			fmt.Printf("Exposing %s as %s\n", parts[0], l)
+		}
 	}
 }
 
@@ -88,7 +93,7 @@ func SetupEnviron(m *fakemachine.Machine, options Options) {
 	// These are the environment variables that will be detected on the
 	// host and propagated to fakemachine. These are listed lower case, but
 	// they are detected and configured in both lower case and upper case.
-	var environ_vars = [...]string {
+	var environVars = [...]string{
 		"http_proxy",
 		"https_proxy",
 		"ftp_proxy",
@@ -98,7 +103,7 @@ func SetupEnviron(m *fakemachine.Machine, options Options) {
 	}
 
 	// First add variables from host
-	for _, e := range environ_vars {
+	for _, e := range environVars {
 		lowerVar := strings.ToLower(e) // lowercase not really needed
 		lowerVal := os.Getenv(lowerVar)
 		if lowerVal != "" {
@@ -123,14 +128,12 @@ func SetupEnviron(m *fakemachine.Machine, options Options) {
 	}
 
 	// Puts in a format that is compatible with output of os.Environ()
-	if EnvironVars != nil {
-		EnvironString := []string{}
-		for k, v := range EnvironVars {
-			warnLocalhost(k, v)
-			EnvironString = append(EnvironString, fmt.Sprintf("%s=%s", k, v))
-		}
-		m.SetEnviron(EnvironString) // And save the resulting environ vars on m
+	EnvironString := []string{}
+	for k, v := range EnvironVars {
+		warnLocalhost(k, v)
+		EnvironString = append(EnvironString, fmt.Sprintf("%s=%s", k, v))
 	}
+	m.SetEnviron(EnvironString) // And save the resulting environ vars on m
 }
 
 func main() {
@@ -140,8 +143,8 @@ func main() {
 
 	args, err := parser.Parse()
 	if err != nil {
-		flagsErr, ok := err.(*flags.Error)
-		if ok && flagsErr.Type == flags.ErrHelp {
+		var flagsErr *flags.Error
+		if errors.As(err, &flagsErr) && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 		} else {
 			os.Exit(1)
@@ -155,6 +158,7 @@ func main() {
 	}
 
 	m.SetShowBoot(options.ShowBoot)
+	m.SetQuiet(options.Quiet)
 	SetupVolumes(m, options)
 	SetupImages(m, options)
 	SetupEnviron(m, options)
@@ -178,7 +182,7 @@ func main() {
 
 	command := "/bin/bash"
 	if len(args) > 0 {
-		command = strings.Join(args, " ")
+		command = shellescape.QuoteCommand(args)
 	}
 
 	ret, err := m.Run(command)
